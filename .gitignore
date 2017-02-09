@@ -1,0 +1,8 @@
+.vs
+*.zip
+*.jpg
+*.sln
+*.pyproj
+
+m_ref/*
+papers/*
