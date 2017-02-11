@@ -48,12 +48,12 @@ def load_train_data_to_mem(db_fullpath, patch_size, std_thrsh, train_size):
     return np.asarray(train_data)
 
 def load_maybe_build_train_set(train_fullpath, db_fullpath=None, train_size=None,
-                               patch_size=None, std_thrsh=None, ):
+                               patch_size=None, std_thrsh=None, savefile=False):
         """
         Load trainig data if it exist if not run through image db and build patch
         trainig data.
         INPUT: db_fullpath    - full path to tar database
-               train_fullpath - full path to trainig patches if exists if not where it should be saved
+               train_fullpath - full path to trainig patches if exists if not where it should be saved can pass ''
                patch_size    - tuple i.e. (h, w)
                 std_thrsh    -  is std(patch) < std_thrsh discard patch
         """
@@ -66,12 +66,13 @@ def load_maybe_build_train_set(train_fullpath, db_fullpath=None, train_size=None
                 saved_train_data = np.load(train_fullpath)
                 train_size -= saved_train_data.shape[0]
                 if train_size <= 0:
-                    return saved_train_data[:train_size]
+                    return saved_train_data
             except:
                 print('Error when loading trainset will try to rebuild train set') 
         # else build it
         train_data = load_train_data_to_mem(db_fullpath, patch_size, std_thrsh, train_size)
         train_data = np.append(train_data, saved_train_data, axis=0)
-        np.save(train_fullpath, train_data)
+        if savefile:
+            np.save(train_fullpath, train_data)
         
         return train_data
