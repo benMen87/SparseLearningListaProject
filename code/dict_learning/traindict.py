@@ -1,12 +1,14 @@
-from cod import CoD
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from sklearn.linear_model import Lasso
 import os
-
+import sys
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
+
+sys.path.append(dir_path + '/..')
+from sparse_coding.cod import CoD
 
 class Traindict():
 
@@ -100,7 +102,7 @@ def display_atoms(Wd, patch_size):
     plt.show()
 
 
-import db_tools
+from Utils import db_tools
 import scipy.io as scio
 
 if __name__ == '__main__':
@@ -121,8 +123,8 @@ if __name__ == '__main__':
 
     #
     # Load patches
-    db_fp       = os.path.dirname(os.path.realpath(__file__)) + '\\..\\images\\BSDS300-images.tgz' 
-    train_fp    = os.path.dirname(os.path.realpath(__file__)) + '\\..\\train_dict\\train_set.npy'.format(STD_THRESH) 
+    db_fp       = os.path.dirname(os.path.realpath(__file__)) + '\\..\\..\\images\\BSDS300-images.tgz' 
+    train_fp    = os.path.dirname(os.path.realpath(__file__)) + '\\..\\..\\train_dict\\train_set.npy'.format(STD_THRESH) 
     train_data  = db_tools.load_maybe_build_train_set(train_fullpath=train_fp, db_fullpath=db_fp, train_size=TRAIN_SIZE,
                                            patch_size=PATCH_SIZE, std_thrsh=STD_THRESH)
     #
