@@ -117,16 +117,16 @@ if __name__ == '__main__':
     # Hyper parameters
     PATCH_SIZE  = (10, 10)
     STD_THRESH  = 6 
-    TRAIN_SIZE  = 3000 #amount of actual patches 
-    MAX_ITER    = 2000
+    TRAIN_SIZE  = 15000 #amount of actual patches 
+    MAX_ITER    = 100000
     ALPHA       = 0.5
 
     #
     # Load patches
     db_fp       = os.path.dirname(os.path.realpath(__file__)) + '\\..\\..\\images\\BSDS300-images.tgz' 
-    train_fp    = os.path.dirname(os.path.realpath(__file__)) + '\\..\\..\\train_dict\\train_set.npy'.format(STD_THRESH) 
+    train_fp    = os.path.dirname(os.path.realpath(__file__)) + '\\..\\..\\patches_for_traindict\\train_set.npy'.format(STD_THRESH) 
     train_data  = db_tools.load_maybe_build_train_set(train_fullpath=train_fp, db_fullpath=db_fp, train_size=TRAIN_SIZE,
-                                           patch_size=PATCH_SIZE, std_thrsh=STD_THRESH)
+                                           patch_size=PATCH_SIZE, std_thrsh=STD_THRESH, savefile=True)
     #
     # Normalize patches
     train_data -= np.mean(train_data, axis=0)
@@ -138,7 +138,7 @@ if __name__ == '__main__':
     #
     #save learn dictionary
     learned_dict_fp = os.path.dirname(os.path.realpath(__file__)) + \
-    '\\..\\learned_dict\\Wd_norm_iter{}_alpha{}_stdthrsh{}.py'.format(MAX_ITER, ALPHA, STD_THRESH)
+    '\\..\\..\\learned_dict\\Wd_GOOD_iter{}_alpha{}_stdthrsh{}.py'.format(MAX_ITER, ALPHA, STD_THRESH)
     np.save(learned_dict_fp, Wd)
     display_atoms(Wd.T, PATCH_SIZE)
 
