@@ -48,9 +48,6 @@ class Traindict():
         loss_arr = [np.inf]
         sparse_cod = CoD(Wd, alpha=self.alpha)
 
-        #test with sklearn cod model
-        #clf = Lasso(alpha=self.alpha, max_iter=self.max_iter, tol=1e-4)
-
         data_len, train_size = train_data.shape
         train_data_shuff = train_data[:, np.random.permutation(train_size)]
         for i in range(self.max_iter):
@@ -62,21 +59,14 @@ class Traindict():
                            
             Z, _ = sparse_cod.run_cod(patch, Wd)
 
-            #Z = clf.fit(Wd, patch).coef_
-
             if Z.ndim == 1:
                 Z = Z[:, np.newaxis]
             print('iter: %d'%i)
 
-            #
-            # optimize for given sparse code
-            #t = 0
-            #while True:
             loss_arr.append(loss(Wd, patch, Z))
             grad_t = grad(Wd, patch, Z)
-            grad_norm = np.linalg.norm(grad_t, 'fro')
-            dL = loss_arr[-2] - loss_arr[-1]
 
+            grad_norm = np.linalg.norm(grad_t, 'fro')
             #print('loss: %f'%loss_arr[-1])
             #print('grad: %f'%grad_norm)
             
@@ -84,9 +74,6 @@ class Traindict():
             #update dict
             Wd = Wd - eta(i+1)*grad_t
             Wd = Wd / np.linalg.norm(Wd, axis=0)
-
-            if dL < 10e-6 * loss_arr[-1] and False:
-                break 
 
         return (Wd, loss_arr)
 
@@ -117,7 +104,7 @@ if __name__ == '__main__':
     # Hyper parameters
     PATCH_SIZE  = (10, 10)
     STD_THRESH  = 6 
-    TRAIN_SIZE  = 15000 #amount of actual patches 
+    TRAIN_SIZE  = 3000 #amount of actual patches 
     MAX_ITER    = 100000
     ALPHA       = 0.5
 

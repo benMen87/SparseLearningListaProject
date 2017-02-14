@@ -39,9 +39,9 @@ class CoD(object):
             X = X[:, np.newaxis]
 
         n, m  = Wd.shape
-        # S = I - Wd*Wd^T
+        #
+        # INITLIZE
         S = np.eye(m) - np.einsum('ji, jk->ik', Wd, Wd)
-        # B = Wd^T*X
         B = np.einsum('ij, ik->jk', Wd, X)
         Z    = np.zeros((m, 1))
 

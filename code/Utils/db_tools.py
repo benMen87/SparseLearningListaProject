@@ -68,7 +68,7 @@ def load_maybe_build_train_set(train_fullpath, db_fullpath=None, train_size=None
                 if train_size <= 0:
                     return saved_train_data
             except:
-                print('Error when loading trainset will try to rebuild train set') 
+                print('Error when loading train-set will try to rebuild train set') 
         # else build it
         train_data = load_train_data_to_mem(db_fullpath, patch_size, std_thrsh, train_size)
         train_data = np.append(train_data, saved_train_data, axis=0)

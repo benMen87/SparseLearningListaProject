@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import sys
+from collections import namedtuple
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(dir_path + '/..')
@@ -40,7 +41,7 @@ def compute_patch_sc_pydict(patch_set, Wd):
     sparse_code = CoD(Wd, alpha=0.5)
 
     for patch in patch_set:
-        Z = sparse_code.run_cod(X=patch)
+        Z, _ = sparse_code.run_cod(X=patch)
         sparse_rep.append(Z)
     sparse_rep = np.asarray(sparse_rep)
     return {'X':patch_set, 'Y':sparse_rep}
@@ -53,13 +54,55 @@ def build_approx_sc_learnig_data(data_train_path, data_test_path, dict_train_pat
     np.save(outpath + 'trainset.npy', data_lable_dict)
 
     #test data
-    Wd, patches = load_dataset_and_dict(datapath=data_test_path, dictpath=dict_test_path)
-    data_lable_dict = compute_patch_sc_pydict(patch_set=patches, Wd=Wd)
-    np.save(outpath + 'testset.npy', data_lable_dict)
+    if not data_test_path == '':
+        Wd, patches = load_dataset_and_dict(datapath=data_test_path, dictpath=dict_test_path)
+        data_lable_dict = compute_patch_sc_pydict(patch_set=patches, Wd=Wd)
+        np.save(outpath + '\testset.npy', data_lable_dict)
 
 
-build_approx_sc_learnig_data(r'C:\Users\Hillel\Desktop\Msc3\sparse\final_project\patches_for_traindict\train_set_3000.npy', '' \
-    , r'C:\Users\Hillel\Desktop\Msc3\sparse\final_project\learned_dict\Wd_iter50000_alpha0.5_stdthrsh.py.npy', '', './')
+def trainset_gen(data_train_path, valid_ratio=0.2):
+    dt = np.load(data_train_path)
+    data_dict = dt.item()
+
+    train_offset = int(valid_ratio*len(data_dict['X']))
+
+    input   = data_dict['X']
+    labels  = data_dict['Y'] 
+
+    input  -= np.mean(input, axis=0)
+    input  /= np.std(input,  axis=0)
+    #
+    # random shuffle
+    permutation = np.random.permutation(labels.shape[0])
+    input = input[permutation, :]
+    labels = labels[permutation, :]
+    def trainset_gen():
+        while True:
+            for (X, Z) in zip(input[train_offset:], labels[train_offset:]):
+                if np.ndim(X) == 1:
+                    X = X[:, np.newaxis]
+                if np.ndim(Z) == 1:
+                    Z = Z[:, np.newaxis]
+                yield (X, Z)
+
+    def validset_gen():
+        while True:
+            for (X, Z) in zip(input[:train_offset], labels[:train_offset]):
+                if np.ndim(X) == 1:
+                    X = X[:, np.newaxis]
+                if np.ndim(Z) == 1:
+                    Z = Z[:, np.newaxis]
+                yield (X, Z)
+
+    Datagens= namedtuple('Generators', 'train_gen valid_gen')
+    if valid_ratio != 0:
+        ret_gens =  Datagens(train_gen=trainset_gen(), valid_gen=validset_gen())
+    else:
+        ret_gens =  Datagens(train_gen=trainset_gen(), valid_gen=None)
+    return ret_gens 
 
 
-
+if __name__ == '__main__':
+    build_approx_sc_learnig_data(r'C:\Users\Hillel\Desktop\Msc3\sparse\final_project\patches_for_traindict\train_set_3000.npy', \
+                                 '', r'C:\Users\Hillel\Desktop\Msc3\sparse\final_project\learned_dict\Wd_iter100000_alpha0.5_stdthrsh6.npy', \
+                                   '', r'C:\Users\Hillel\Desktop\Msc3\sparse\final_project\lcod_trainset')
