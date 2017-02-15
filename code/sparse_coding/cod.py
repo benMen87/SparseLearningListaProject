@@ -5,7 +5,7 @@ import logging
 
 class CoD(object):
     """
-    Learn sprse represintainon of input
+    Learn sparse representation of input
     """
 
     def __init__(self, Wd,  max_iter=1000, thresh=1e-6, alpha=0.1, verbose=False):

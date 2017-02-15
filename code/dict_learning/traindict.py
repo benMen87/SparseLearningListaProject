@@ -103,25 +103,25 @@ if __name__ == '__main__':
     #
     # Hyper parameters
     PATCH_SIZE  = (10, 10)
-    STD_THRESH  = 6 
-    TRAIN_SIZE  = 3000 #amount of actual patches 
-    MAX_ITER    = 100000
+    STD_THRESH  = 1 
+    TRAIN_SIZE  = 30000 #amount of actual patches 
+    MAX_ITER    = 150000
     ALPHA       = 0.5
-
     #
     # Load patches
     db_fp       = os.path.dirname(os.path.realpath(__file__)) + '\\..\\..\\images\\BSDS300-images.tgz' 
-    train_fp    = os.path.dirname(os.path.realpath(__file__)) + '\\..\\..\\patches_for_traindict\\train_set.npy'.format(STD_THRESH) 
+    train_fp    = os.path.dirname(os.path.realpath(__file__)) + '\\..\\..\\patches_for_traindict\\maxiter_{}_size_{}_thrsh_{}_train_set.npy'.format(MAX_ITER, TRAIN_SIZE, STD_THRESH) 
     train_data  = db_tools.load_maybe_build_train_set(train_fullpath=train_fp, db_fullpath=db_fp, train_size=TRAIN_SIZE,
                                            patch_size=PATCH_SIZE, std_thrsh=STD_THRESH, savefile=True)
     #
     # Normalize patches
+    train_data = train_data.T
     train_data -= np.mean(train_data, axis=0)
     train_data /= np.std(train_data,  axis=0)
     #
     #learn dictionary 
     train_dict = Traindict(max_iter=MAX_ITER, alpha=ALPHA, atom_count=100, step_size=10)
-    Wd, loss   = train_dict.learn_Wd_gd(train_data.T)
+    Wd, loss   = train_dict.learn_Wd_gd(train_data)
     #
     #save learn dictionary
     learned_dict_fp = os.path.dirname(os.path.realpath(__file__)) + \

@@ -1,6 +1,11 @@
 import tensorflow as tf
 import numpy as np
-import approx_sparselearnig_dataset as data_handelr
+import os
+import sys
+
+dir_path = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(dir_path + '/..')
+from Utils import db_tools
 
 class Lcod(object):
     """tensorflow implementation of lcod from
