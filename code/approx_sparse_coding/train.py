@@ -1,6 +1,9 @@
 import lcod
 import tensorflow as tf
 import shutil
+import matplotlib.pyplot as plt
+import numpy as np
+
 
 def tf_sparse_count(tf_vec):
     non_zeros = tf.not_equal(tf_vec, 0)
@@ -38,7 +41,13 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None, valid_
     decay_rate    = 1
     learning_rate = tf.train.inverse_time_decay(learning_rate, global_step, k, decay_rate)
     
-    optimizer     = tf.train.GradientDescentOptimizer(learning_rate).minimize(model.loss, global_step=global_step)
+    #
+    # Clip gradients to avoid overflow due to recurrent nature of algorithm
+    optimizer  = tf.train.GradientDescentOptimizer(learning_rate) #.minimize(model.loss, global_step=global_step)
+    gvs        = optimizer.compute_gradients(model.loss)   
+    capped_gvs = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in gvs]
+    optimizer  = optimizer.apply_gradients(capped_gvs)
+
     #
     # for tensor-board logging
     with tf.name_scope('summary'):
@@ -55,10 +64,18 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None, valid_
     tf.global_variables_initializer().run(session=sess)
     print('Initialized')
 
+    train_loss      = []
+    valid_loss      = []
+    Z_sparcity      = []
+    Z_star_sparcity = []
     for step in range(num_optimization_steps):
-        X_train, Z_train = next(train_gen)
-        _, loss, summary = sess.run( [optimizer, model.loss, summary_op], 
+        X_train, Z_train           = next(train_gen)
+        _, loss, summary, theta, Z = sess.run( [optimizer, model.loss, summary_op, model.theta, model.output], 
                                     {model.input: X_train, model.target: Z_train})
+        train_loss.append(loss)
+        Z_sparcity.append(np.count_nonzero(Z))
+        Z_star_sparcity.append(np.count_nonzero(Z_train))
+
         train_summary_writer.add_summary(summary, global_step=step)
         print('\rTrain step: %d. Loss %.6f.' % (step+1, loss))
 
@@ -66,12 +83,36 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None, valid_
             val_avg_loss = 0
             for val_step in  range(valid_steps):
                 X_val, Z_val = next(valid_gen)
-                loss, summary = sess.run( [model.loss, summary_op], 
+                loss, summary, Z_out = sess.run( [model.loss, summary_op, model.output], 
                                     {model.input: X_val, model.target: Z_val})
                 val_avg_loss += loss
                 valid_summary_writer.add_summary(summary, global_step=step)
             val_avg_loss /= valid_steps
+            valid_loss.append(val_avg_loss)
             print('Valid Loss Avg loss: %.6f.'%val_avg_loss)
+
+    plt.figure(1)
+    plt.subplot(211)
+    plt.plot(train_loss)
+    plt.ylabel('loss')
+    plt.title('Train loss per iteration')
+
+    plt.subplot(212)
+    plt.plot(valid_loss)
+    plt.ylabel('loss')
+    plt.title('Validation loss per iteration')
+
+    plt.figure(2)
+    plt.subplot(211)
+    plt.plot(Z_star_sparcity)
+    plt.title('ZStar sparsity')
+
+    plt.subplot(212)
+    plt.plot(Z_sparcity)
+    plt.title('Z sparsity')
+
+    plt.show()
+
 
 
 import argparse 
@@ -99,10 +140,10 @@ if __name__ == '__main__':
 
     parser.add_argument('-is', '--input_size', default=100, help='Size of dense vector X')
 
-    parser.add_argument('-u', '--unroll_count', default=7, type=int,\
+    parser.add_argument('-u', '--unroll_count', default=3, type=int,\
         help='Amount of times to run lcod/list block')
 
-    parser.add_argument('-n', '--num_steps', default=1000, type=int,\
+    parser.add_argument('-n', '--num_steps', default=350, type=int,\
         help='number of training steps')
 
     parser.add_argument('-vs', '--num_validsteps', default=5, type=int,\
