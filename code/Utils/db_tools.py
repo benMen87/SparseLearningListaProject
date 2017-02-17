@@ -10,18 +10,18 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(dir_path + '/..')
 from sparse_coding.cod import CoD
 
-def next_image_gen(db_fullpath, rgb2gray=True):
+def next_image_gen(db_fullpath, dset_typ='train', rgb2gray=True):
 
      db_p = tar.open(db_fullpath)
      for f_info in db_p.getmembers():
-         if 'train' in f_info.name and f_info.name.endswith('.jpg'):
+         if dset_typ in f_info.name and f_info.name.endswith('.jpg'):
              img_fp = db_p.extractfile(f_info)
              I = Image.open(img_fp)
              if rgb2gray:
                  I = np.asarray(I.convert('L'))
              yield I
 
-def next_patch_gen(db_fullpath, patch_size, std_thrsh, max_ppi=np.inf):
+def next_patch_gen(db_fullpath, patch_size, std_thrsh, dset_typ='train',  max_ppi=np.inf):
     """
     Generator for iterating over patches of training set images.
     INPUT:
@@ -30,7 +30,7 @@ def next_patch_gen(db_fullpath, patch_size, std_thrsh, max_ppi=np.inf):
     std_thrsh   - discard patches with std lower than threshold
     max_ppi     - max amount of patches per image 
     """
-    img_iter = next_image_gen(db_fullpath)
+    img_iter = next_image_gen(db_fullpath, dset_typ)
     for im in img_iter:
         patches = image.extract_patches_2d(im, patch_size)
         patches_skipped = 0
@@ -42,10 +42,10 @@ def next_patch_gen(db_fullpath, patch_size, std_thrsh, max_ppi=np.inf):
                 continue
             yield p
 
-def load_train_data_to_mem(db_fullpath, patch_size, std_thrsh, train_size):
+def load_train_data_to_mem(db_fullpath, patch_size, std_thrsh, train_size, dset_typ='train'):
 
     train_data = []
-    patch_iter = next_patch_gen(db_fullpath, patch_size, std_thrsh)
+    patch_iter = next_patch_gen(db_fullpath, patch_size, std_thrsh, dset_typ)
 
     for i in range(np.uint64(train_size)):
         print('patch number %d out of %d'%(i, train_size))
@@ -54,12 +54,12 @@ def load_train_data_to_mem(db_fullpath, patch_size, std_thrsh, train_size):
     return np.asarray(train_data)
 
 def load_maybe_build_train_set(train_fullpath, db_fullpath=None, train_size=None,
-                               patch_size=None, std_thrsh=None, savefile=False):
+                               patch_size=None, std_thrsh=None, dset_typ='train', savefile=False):
         """
-        Load trainig data if it exist if not run through image db and build patch
-        trainig data.
+        Load training data if it exist if not run through image db and build patch
+        training data.
         INPUT: db_fullpath    - full path to tar database
-               train_fullpath - full path to trainig patches if exists if not where it should be saved can pass ''
+               train_fullpath - full path to training/test patches if exists otherwise '' can be passed
                patch_size    - tuple i.e. (h, w)
                 std_thrsh    -  is std(patch) < std_thrsh discard patch
         """
@@ -76,7 +76,7 @@ def load_maybe_build_train_set(train_fullpath, db_fullpath=None, train_size=None
             except:
                 print('Error when loading train-set will try to rebuild train set') 
         # else build it
-        train_data = load_train_data_to_mem(db_fullpath, patch_size, std_thrsh, train_size)
+        train_data = load_train_data_to_mem(db_fullpath, patch_size, std_thrsh, train_size, dset_typ)
         train_data = np.append(train_data, saved_train_data, axis=0)
         if savefile:
             np.save(train_fullpath, train_data)
@@ -171,17 +171,24 @@ def trainset_gen(data_train_path, valid_ratio=0.2):
 def build_approx_sc_learnig_data(data_train_path, data_test_path, dict_train_path, dict_test_path, outpath): 
     """
     """
+
+    #
     #training data
-    Wd, patches = load_dataset_and_dict(datapath=data_train_path, dictpath=dict_train_path)
+    if not os.path.isfile(outpath + '/trainset.npy'):
+        Wd, patches = load_dataset_and_dict(datapath=data_train_path, dictpath=dict_train_path)
+        patches -= np.mean(patches, axis=1, keepdims=True)
+        patches /= np.std(patches, axis=1, keepdims=True)
 
-    patches -= np.mean(patches, axis=1, keepdims=True)
-    patches /= np.std(patches, axis=1, keepdims=True)
-
-    data_lable_dict = compute_patch_sc_pydict(patch_set=patches, Wd=Wd)
-    np.save(outpath + '/trainset.npy', data_lable_dict)
-
-    #test data
-    if not data_test_path == '':
-        Wd, patches = load_dataset_and_dict(datapath=data_test_path, dictpath=dict_test_path)
         data_lable_dict = compute_patch_sc_pydict(patch_set=patches, Wd=Wd)
-        np.save(outpath + '\testset.npy', data_lable_dict)
+        np.save(outpath + '/trainset.npy', data_lable_dict)
+    else:
+        print('trainset: {} \n exists already please rename or change dir if you wish to create a new one'.format(outpath + '/trainset.npy'))
+    #
+    #test data
+    if not data_test_path == '' and not os.path.isfile(outpath + '/testset.npy'):
+        Wd, patches = load_dataset_and_dict(datapath=data_test_path, dictpath=dict_test_path)
+        patches -= np.mean(patches, axis=1, keepdims=True)
+        patches /= np.std(patches, axis=1, keepdims=True)
+
+        data_lable_dict = compute_patch_sc_pydict(patch_set=patches, Wd=Wd)
+        np.save(outpath + '/testset.npy', data_lable_dict)

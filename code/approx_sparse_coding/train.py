@@ -140,7 +140,7 @@ if __name__ == '__main__':
 
     parser.add_argument('-is', '--input_size', default=100, help='Size of dense vector X')
 
-    parser.add_argument('-u', '--unroll_count', default=3, type=int,\
+    parser.add_argument('-u', '--unroll_count', default=7, type=int,\
         help='Amount of times to run lcod/list block')
 
     parser.add_argument('-n', '--num_steps', default=350, type=int,\

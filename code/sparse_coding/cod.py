@@ -25,7 +25,7 @@ class CoD(object):
         x  = x - np.sign(x)*threshold
         return x
 
-    def run_cod(self, X, Wd =None, max_iter=None, thresh=None, alpha=None):
+    def fit(self, X, Wd =None, max_iter=None, thresh=None, alpha=None):
         """
         Find sparse representation via Li & Osher coordinate decent.
         """

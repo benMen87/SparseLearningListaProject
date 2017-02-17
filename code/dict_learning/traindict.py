@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
-from sklearn.linear_model import Lasso
 import os
 import sys
 
@@ -9,6 +8,7 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 
 sys.path.append(dir_path + '/..')
 from sparse_coding.cod import CoD
+from sparse_coding.ista import ISTA
 
 class Traindict():
 
@@ -35,7 +35,7 @@ class Traindict():
         else:
             self.Wd_init = Wd_init
                
-    def learn_Wd_gd(self, train_data):
+    def learn_Wd_gd(self, train_data, sc_method='cod'):
         """
         Learn sparse dictionary using gradient decent
         INPUT: train_data - feture_vector X sample i.e. [data_len, train_size]
@@ -46,7 +46,14 @@ class Traindict():
         loss = lambda Wd,X,Z: 0.5*np.linalg.norm(X - np.matmul(Wd, Z))**2 + self.alpha*np.linalg.norm(Z, 1) 
         grad = lambda Wd, X, Z: np.outer((np.matmul(Wd, Z) - X), Z)
         loss_arr = [np.inf]
-        sparse_cod = CoD(Wd, alpha=self.alpha)
+
+        if sc_method == 'cod':
+            sparse_code = CoD(Wd, alpha=self.alpha)
+        elif sc_method == 'ista':
+            sparse_code = ISTA(Wd, alpha=self.alpha)
+        else:
+            raise NotImplementedError('only ista and cod are supported')
+        
 
         data_len, train_size = train_data.shape
         train_data_shuff = train_data[:, np.random.permutation(train_size)]
@@ -57,7 +64,7 @@ class Traindict():
             if patch.ndim == 1:
                 patch = patch[:, np.newaxis]
                            
-            Z, _ = sparse_cod.run_cod(patch, Wd)
+            Z, _ = sparse_code.fit(patch, Wd)
 
             if Z.ndim == 1:
                 Z = Z[:, np.newaxis]
@@ -113,6 +120,15 @@ if __name__ == '__main__':
     train_fp    = os.path.dirname(os.path.realpath(__file__)) + '\\..\\..\\patches_for_traindict\\maxiter_{}_size_{}_thrsh_{}_train_set.npy'.format(MAX_ITER, TRAIN_SIZE, STD_THRESH) 
     train_data  = db_tools.load_maybe_build_train_set(train_fullpath=train_fp, db_fullpath=db_fp, train_size=TRAIN_SIZE,
                                            patch_size=PATCH_SIZE, std_thrsh=STD_THRESH, savefile=True)
+
+    #
+    # Build test data probably no use for it in this stage
+    db_fp       = os.path.dirname(os.path.realpath(__file__)) + '\\..\\..\\images\\BSDS300-images.tgz' 
+    TEST_SIZE   = np.uint32(TRAIN_SIZE*0.4)
+    test_fp    = os.path.dirname(os.path.realpath(__file__)) + '\\..\\..\\patches_for_traindict\\maxiter_{}_size_{}_thrsh_{}_test_set.npy'.format(MAX_ITER, TRAIN_SIZE, STD_THRESH) 
+    test_data  = db_tools.load_maybe_build_train_set(train_fullpath=test_fp, db_fullpath=db_fp, train_size=TRAIN_SIZE,
+                                           patch_size=PATCH_SIZE, std_thrsh=STD_THRESH, dset_typ='test', savefile=True)
+
     #
     # Normalize patches
     train_data = train_data.T
@@ -121,11 +137,11 @@ if __name__ == '__main__':
     #
     #learn dictionary 
     train_dict = Traindict(max_iter=MAX_ITER, alpha=ALPHA, atom_count=100, step_size=10)
-    Wd, loss   = train_dict.learn_Wd_gd(train_data)
+    Wd, loss   = train_dict.learn_Wd_gd(train_data, sc_method='ista')
     #
     #save learn dictionary
     learned_dict_fp = os.path.dirname(os.path.realpath(__file__)) + \
-    '\\..\\..\\learned_dict\\Wd_GOOD_iter{}_alpha{}_stdthrsh{}.py'.format(MAX_ITER, ALPHA, STD_THRESH)
+    '\\..\\..\\learned_dict\\Wd_ISTA_iter{}_alpha{}_stdthrsh{}.py'.format(MAX_ITER, ALPHA, STD_THRESH)
     np.save(learned_dict_fp, Wd)
     display_atoms(Wd.T, PATCH_SIZE)
 
