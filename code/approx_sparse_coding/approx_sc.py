@@ -1,4 +1,6 @@
-class approx_sc(object):
+import tensorflow as tf
+
+class ApproxSC(object):
     """description of class"""
     def __init__(self, We_shape, unroll_count, We=None,  shrinkge_type='soft thresh'):
         """ Create a LCoD model.
@@ -17,7 +19,7 @@ class approx_sc(object):
         # graph i/o
         self._X     = tf.placeholder(tf.float32, shape=(self._We_shape[1], 1), name='X')
         self._Zstar = tf.placeholder(tf.float32, shape=(self._We_shape[1], 1), name='Zstar')
-        self._Z     = tf.Variable(tf.zeros_initializer([m, 1]), trainable=False)
+        self._Z     = None
         #
         # Trainable Parameters 
         self._S     = tf.Variable( tf.truncated_normal([m, m]), name='S')
@@ -32,6 +34,10 @@ class approx_sc(object):
         #
         # Loss
         self._loss  = None
+
+
+    def build_model(self):
+        assert('Abstract class define child loss')
 
     def _shrinkge(self):
         if self._shrinkge_type == 'soft thresh':
@@ -58,12 +64,13 @@ class approx_sc(object):
         """ A 0-D float32 Tensor.
             function is used as a limited setter and a getter...
         """
-        if self._loss is None:
-           assert('Abstract class define child loss')
+        assert('Abstract class define child loss')
 
     @property
     def output(self):
-       return self._Z
+        if self._Z is None:
+            assert('Abstract class define child Z') 
+        return self._Z
 
     @property
     def input(self):
@@ -84,6 +91,11 @@ class approx_sc(object):
     @property
     def We(self):
         return self._We
+
+    @property
+    def unroll_count(self):
+        return self._unroll_count
+
 
 
 

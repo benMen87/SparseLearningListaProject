@@ -1,4 +1,5 @@
 import lcod
+import lista
 import tensorflow as tf
 import shutil
 import matplotlib.pyplot as plt
@@ -153,12 +154,12 @@ from Utils import db_tools
 
 if __name__ == '__main__':
     
-    defualt_iters = [0, 1, 2, 5, 10, 20, 50, 100, 200]
+    defualt_iters = [1, 2, 5, 10, 20, 50, 100, 200]
 
     parser = argparse.ArgumentParser(description='Train approximate sparse code learnign network based on paper \
     Learning Fast Approximations of Sparse Coding - http://yann.lecun.com/exdb/publis/pdf/gregor-icml-10.pdf')
 
-    parser.add_argument('-m', '--model', default='lcod', type=str, choices=['lcod', 'lista'], \
+    parser.add_argument('-m', '--model', default='lista', type=str, choices=['lcod', 'lista'], \
         help='input mode to use valid options are - "lcod" or "lista"')
 
     parser.add_argument('-tr', '--train_path', default='/../../lcod_trainset/trainset.npy', type=str,\
@@ -205,8 +206,10 @@ if __name__ == '__main__':
         print("*"*30 + 'unroll amount {}'.format(unroll_count) + "*"*30)
         if args.model == 'lcod':
             model = lcod.LCoD(We_shape=We_shape, unroll_count=unroll_count)
+            tst = 'cod'
         else:
-            raise NotImplementedError('lista is not implemented yet...')
+            model = lista.LISTA(We_shape=We_shape, unroll_count=unroll_count)
+            tst = 'ista'
 
         with tf.Session() as sess:
             model.build_model()
@@ -219,15 +222,22 @@ if __name__ == '__main__':
 
             test_gen = db_tools.testset_gen(os.path.dirname(os.path.realpath(__file__)) + args.test_path)
             aperr, scerr = test(sess=sess, model=model, iter_count=unroll_count, \
-                                test_gen=test_gen, Wd=Wd, sparse_coder='cod')
+                                test_gen=test_gen, Wd=Wd, sparse_coder=tst)
 
         tf.reset_default_graph()
         approx_error.append(aperr)
         sc_error.append(scerr)
+    
+    if args.model == 'lcod':
+        lb1 = 'LCoD'
+        lb2 = 'CoD'
+    else:
+         lb1 = 'LISTA'
+         lb2 = 'ISTA'
 
     plt.figure()
-    plt.plot(args.unroll_count, approx_error, 'ro', label='LCoD' )
-    plt.plot(args.unroll_count, sc_error, 'g^', label='CoD')
+    plt.plot(args.unroll_count, approx_error, 'ro', label=lb1 )
+    plt.plot(args.unroll_count, sc_error, 'g^', label=lb2)
     plt.ylabel('error')
     plt.xlabel('iter')
     plt.legend(loc='upper left')
