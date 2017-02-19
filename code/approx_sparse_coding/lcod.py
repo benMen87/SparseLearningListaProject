@@ -7,13 +7,13 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(dir_path + '/..')
 from Utils import db_tools
 
-class Lcod(object):
+class LCoD(object):
     """tensorflow implementation of lcod from
        Learning Fast Approximations of Sparse Coding - http://yann.lecun.com/exdb/publis/pdf/gregor-icml-10.pdf
     """
 
-    def __init__(self, We_shape, unroll_count, shrinkge_type='soft thresh'):
-        """ Create a Lcod model.
+    def __init__(self, We_shape, unroll_count, We=None,  shrinkge_type='soft thresh'):
+        """ Create a LCoD model.
         
         Args:
             We_shape: Input X is encoded using matmul(We, X).
@@ -33,8 +33,14 @@ class Lcod(object):
         #
         # Trainable Parameters 
         self._S     = tf.Variable( tf.truncated_normal([m, m]), name='S')
-        self._We    = tf.Variable( tf.truncated_normal([m,n]), name='We')
-        self._theta = tf.Variable(0.5, name='theta')
+        self._theta = tf.Variable(tf.truncated_normal([1]), name='theta')
+
+        if We is None:
+            self._We    = tf.Variable( tf.truncated_normal([m,n]), name='We', dtype=tf.float32)
+        else:
+            #
+            # warm start
+            self._We    = tf.Variable(We, name='We', dtype=tf.float32)
         #
         # Loss
         self._loss  = None
@@ -46,7 +52,10 @@ class Lcod(object):
             raise NotImplementedError('Double Tanh not implemented')
 
     def _soft_thrsh(self, B):
-        soft_thrsh_out = tf.multiply(tf.sign(B), tf.nn.relu(tf.subtract(tf.abs(B), self._theta)))
+        #soft_thrsh_out = tf.multiply(tf.sign(B), tf.nn.relu(tf.subtract(tf.abs(B), self._theta)))
+        soft_thrsh_out  = tf.nn.relu(tf.divide(B, self._theta) - 1)
+        soft_thrsh_out  = tf.multiply(tf.sign(B), soft_thrsh_out)
+        soft_thrsh_out  = tf.multiply(soft_thrsh_out, self._theta)
         return soft_thrsh_out
 
     def _double_tanh(self, B):
@@ -56,7 +65,7 @@ class Lcod(object):
         raise NotImplementedError('Double Tanh not implemented')
 
     def _lcod_step(self, Z, B, S, shrink_fn):
-        """ Lcod step.
+        """ LCoD step.
 
         Args:
             Z:    sparse representation of last iteration.
@@ -70,10 +79,10 @@ class Lcod(object):
         # run one lcod pass through
         Z_hat     = shrink_fn(B)
         res       = tf.subtract(Z_hat, Z)
-        k         = tf.to_int32(tf.argmax(np.abs(res), axis=0))
+        k         = tf.to_int32(tf.argmax(tf.abs(res), axis=0))
         #
         # update
-        B = np.add(B, np.multiply(tf.transpose(tf.gather(tf.transpose(S), k)), tf.gather(res, k)))
+        B = tf.add(B, tf.multiply(tf.transpose(tf.gather(tf.transpose(S), k)), tf.gather(res, k)))
 
         unchanged_indices = tf.range(tf.size(Z))
         change_indices    = k
@@ -82,20 +91,15 @@ class Lcod(object):
 
         return (Z, B)
 
-    def build_model(self, amount_unroll=7):
+    def build_model(self):
         shrinkge_fn = self._shrinkge()
 
-        print('We shape:{}, x shape: {}'.format(self._We.get_shape(), self._X.get_shape()))
         B = tf.matmul(self._We, self._X)
-        print('B  shape: {}'.format(B.get_shape()))
         #
         # run unrolling
-        #Z_arr = []
-        #B_arr = [] 
-        for t in  range(amount_unroll):
+        for t in  range(self._unroll_count):
             self._Z, B = self._lcod_step(self._Z, B, self._S, shrinkge_fn)
         self._Z = shrinkge_fn(B)
-        #return Z
 
     @property
     def loss(self):
@@ -104,12 +108,16 @@ class Lcod(object):
         """
         if self._loss is None:
             with tf.variable_scope('loss'):
-                self._loss = tf.reduce_mean((self._Zstar - self._Z)**2, name='loss')         
+                self._loss = tf.nn.l2_loss(self._Zstar - self._Z, name='loss') 
+                #self._loss += 0.01*tf.nn.l2_loss(self._theta)
+                #self._loss += 0.1*tf.nn.l2_loss(self._S)
+                #self._loss += 0.1*tf.nn.l2_loss(self._We) 
         return self._loss
 
     @property
     def output(self):
        return self._Z
+
     @property
     def input(self):
         return self._X
@@ -124,11 +132,16 @@ class Lcod(object):
             return self._theta
         else:
             return None
+
     @property
     def S(self):
         return self._S
 
     @property
-    def Wd(self):
-        return self._Wd
+    def We(self):
+        return self._We
+
+    @property
+    def unroll_count(self):
+        return self._unroll_count
    

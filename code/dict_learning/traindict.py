@@ -93,6 +93,8 @@ def display_atoms(Wd, patch_size):
            interpolation='nearest')
     plt.xticks(())
     plt.yticks(())
+
+    plt.ion()
     plt.show()
 
 

@@ -84,7 +84,7 @@ def load_maybe_build_train_set(train_fullpath, db_fullpath=None, train_size=None
         return train_data
 
 ##############################################################
-#                   Tools for Lista/Lcod                     #
+#                   Tools for Lista/LCoD                     #
 ##############################################################
 
 def load_dictioary(dict_path):
@@ -124,8 +124,31 @@ def compute_patch_sc_pydict(patch_set, Wd):
         sparse_rep.append(Z)
     sparse_rep = np.asarray(sparse_rep)
     return {'X':patch_set, 'Y':sparse_rep}
+   
+def basic_X_Z_gen(input, labels, run_once=False):
+   while True:
+    for (X, Z) in zip(input, labels):
+        if np.ndim(X) == 1:
+            X = X[:, np.newaxis]
+        if np.ndim(Z) == 1:
+            Z = Z[:, np.newaxis]
+        yield (X, Z)
+    else:
+        if run_once:
+            break
 
+def testset_gen(data_test_path, run_once=True):
+    dt = np.load(data_test_path)
+    data_dict = dt.item()
 
+    input   = data_dict['X']
+    labels  = data_dict['Y'] 
+
+    input -= np.mean(input, axis=1, keepdims=True)
+    input /= np.std(input, axis=1, keepdims=True)
+
+    return basic_X_Z_gen(input, labels, True)
+        
 def trainset_gen(data_train_path, valid_ratio=0.2):
     dt = np.load(data_train_path)
     data_dict = dt.item()
@@ -142,29 +165,15 @@ def trainset_gen(data_train_path, valid_ratio=0.2):
     permutation = np.random.permutation(labels.shape[0])
     input = input[permutation, :]
     labels = labels[permutation, :]
-    def trainset_gen():
-        while True:
-            for (X, Z) in zip(input[train_offset:], labels[train_offset:]):
-                if np.ndim(X) == 1:
-                    X = X[:, np.newaxis]
-                if np.ndim(Z) == 1:
-                    Z = Z[:, np.newaxis]
-                yield (X, Z)
 
-    def validset_gen():
-        while True:
-            for (X, Z) in zip(input[:train_offset], labels[:train_offset]):
-                if np.ndim(X) == 1:
-                    X = X[:, np.newaxis]
-                if np.ndim(Z) == 1:
-                    Z = Z[:, np.newaxis]
-                yield (X, Z)
+    trainset_gen = basic_X_Z_gen(input[train_offset:], labels[train_offset:])
+    validset_gen = basic_X_Z_gen(input[:train_offset], labels[:train_offset])
 
     Datagens= namedtuple('Generators', 'train_gen valid_gen')
     if valid_ratio != 0:
-        ret_gens =  Datagens(train_gen=trainset_gen(), valid_gen=validset_gen())
+        ret_gens =  Datagens(train_gen=trainset_gen, valid_gen=validset_gen)
     else:
-        ret_gens =  Datagens(train_gen=trainset_gen(), valid_gen=None)
+        ret_gens =  Datagens(train_gen=trainset_gen, valid_gen=None)
     return ret_gens 
 
 
