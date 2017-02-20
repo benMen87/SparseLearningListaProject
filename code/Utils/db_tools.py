@@ -162,9 +162,9 @@ def trainset_gen(data_train_path, valid_ratio=0.2):
     input /= np.std(input, axis=1, keepdims=True)
     #
     # random shuffle
-    permutation = np.random.permutation(labels.shape[0])
-    input = input[permutation, :]
-    labels = labels[permutation, :]
+    #permutation = np.random.permutation(labels.shape[0])
+    #input = input[permutation, :]
+    #labels = labels[permutation, :]
 
     trainset_gen = basic_X_Z_gen(input[train_offset:], labels[train_offset:])
     validset_gen = basic_X_Z_gen(input[:train_offset], labels[:train_offset])

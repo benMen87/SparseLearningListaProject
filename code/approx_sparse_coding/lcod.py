@@ -20,9 +20,20 @@ class LCoD(ApproxSC):
             We_shape: Input X is encoded using matmul(We, X).
             unroll_size: Amount of times to repeat lcod block.
         """
-        super().__init__(We_shape, unroll_count, We, shrinkge_type)
-        m, n = self._We_shape
-        self._Z     = tf.Variable(tf.zeros_initializer([m, 1]), trainable=False)
+        super().__init__(We_shape, unroll_count, shrinkge_type)
+        m, n            = self._We_shape
+        self._Z         = tf.zeros([m, 1])
+        if We != None:
+            #
+            # warm start
+            self._theta = tf.Variable(tf.constant(0.5), name='theta')
+            self._We    = tf.Variable(We, name='We', dtype=tf.float32)
+            self._S     = tf.Variable(np.eye(m) - np.matmul(We, We.T), dtype=tf.float32)
+        else:
+            self._theta = tf.Variable(tf.truncated_normal([1]), name='theta')
+            self._S     = tf.Variable( tf.truncated_normal([m, m]), name='S')
+            self._We    = tf.Variable( tf.truncated_normal([m,n]), name='We', dtype=tf.float32)
+
      
  
     def _lcod_step(self, Z, B, S, shrink_fn):
@@ -69,8 +80,9 @@ class LCoD(ApproxSC):
         """
         if self._loss is None:
             with tf.variable_scope('loss'):
-                self._loss = tf.nn.l2_loss(self._Zstar - self._Z, name='loss') 
-                #self._loss += 0.01*tf.nn.l2_loss(self._theta)
+                self._loss = tf.nn.l2_loss(self._Zstar - self._Z, name='loss')
+                self._loss += 1e6*tf.nn.l2_loss(tf.minimum(self._theta, 0))  
+                #self._loss += tf.nn.l2_loss(self._theta)
                 #self._loss += 0.1*tf.nn.l2_loss(self._S)
                 #self._loss += 0.1*tf.nn.l2_loss(self._We) 
         return self._loss

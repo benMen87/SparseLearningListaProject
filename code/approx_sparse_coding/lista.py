@@ -5,6 +5,7 @@ import sys
 from approx_sc import ApproxSC
 
 
+
 class LISTA(ApproxSC):
     """description of class"""
 
@@ -15,7 +16,19 @@ class LISTA(ApproxSC):
             We_shape: Input X is encoded using matmul(We, X).
             unroll_size: Amount of times to repeat lcod block.
         """
-        super().__init__(We_shape, unroll_count, We, shrinkge_type)
+        super().__init__(We_shape, unroll_count, shrinkge_type)
+        m, n            = self._We_shape
+        if We != None:
+            #
+            # warm start
+            L           = max(abs(np.linalg.eigvals(np.matmul(We, We.T))))
+            self._theta = tf.Variable(tf.constant(0.5/L, dtype=tf.float32), name='theta')
+            self._We    = tf.Variable(We/L, name='We', dtype=tf.float32)
+            self._S     = tf.Variable(np.eye(m) - np.matmul(We/L, We.T), dtype=tf.float32)
+        else:
+            self._theta = tf.Variable(tf.truncated_normal([1]), name='theta')
+            self._S     = tf.Variable( tf.truncated_normal([m, m]), name='S')
+            self._We    = tf.Variable( tf.truncated_normal([m,n]), name='We', dtype=tf.float32)
  
     def _lista_step(self, Z, B, S, shrink_fn):
         """ LCoD step.

@@ -1,8 +1,9 @@
 import tensorflow as tf
+import numpy as np
 
 class ApproxSC(object):
     """description of class"""
-    def __init__(self, We_shape, unroll_count, We=None,  shrinkge_type='soft thresh'):
+    def __init__(self, We_shape, unroll_count,  shrinkge_type='soft thresh'):
         """ Create a LCoD model.
         
         Args:
@@ -22,15 +23,9 @@ class ApproxSC(object):
         self._Z     = None
         #
         # Trainable Parameters 
-        self._S     = tf.Variable( tf.truncated_normal([m, m]), name='S')
-        self._theta = tf.Variable(tf.truncated_normal([1]), name='theta')
-
-        if We is None:
-            self._We    = tf.Variable( tf.truncated_normal([m,n]), name='We', dtype=tf.float32)
-        else:
-            #
-            # warm start
-            self._We    = tf.Variable(We, name='We', dtype=tf.float32)
+        self._theta = None
+        self._S     = None
+        self._We    = None
         #
         # Loss
         self._loss  = None
@@ -46,10 +41,10 @@ class ApproxSC(object):
             raise NotImplementedError('Double Tanh not implemented')
 
     def _soft_thrsh(self, B):
-        #soft_thrsh_out = tf.multiply(tf.sign(B), tf.nn.relu(tf.subtract(tf.abs(B), self._theta)))
-        soft_thrsh_out  = tf.nn.relu(tf.divide(B, self._theta) - 1)
-        soft_thrsh_out  = tf.multiply(tf.sign(B), soft_thrsh_out)
-        soft_thrsh_out  = tf.multiply(soft_thrsh_out, self._theta)
+        soft_thrsh_out = tf.multiply(tf.sign(B), tf.nn.relu(tf.subtract(tf.abs(B), self._theta)))
+        #soft_thrsh_out  = tf.nn.relu(tf.divide(B, self._theta) - 1)
+        #soft_thrsh_out  = tf.multiply(tf.sign(B), soft_thrsh_out)
+        #soft_thrsh_out  = tf.multiply(soft_thrsh_out, self._theta)
         return soft_thrsh_out
 
     def _double_tanh(self, B):
@@ -82,14 +77,21 @@ class ApproxSC(object):
 
     @property
     def theta(self):
+        if self._theta is None:
+            assert('Abstract class define child theta') 
+
         return self._theta
         
     @property
     def S(self):
+        if self._S is None:
+            assert('Abstract class define child S') 
         return self._S
 
     @property
     def We(self):
+        if self._We is None:
+            assert('Abstract class define child We') 
         return self._We
 
     @property

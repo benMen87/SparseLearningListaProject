@@ -17,6 +17,12 @@ def tf_sparse_count(tf_vec):
 def zero_none_grad(grad, var):
     return grad if grad != None else tf.zeros_like(var)
 
+def cape_g_byname(grad, var, name, min=-1, max=1):
+    grad  = zero_none_grad(grad, var)
+    if var.name == model.theta.name:
+        grad  = tf.clip_by_value(zero_none_grad(grad, var), min, max)
+    return grad
+
 def train(sess, model, train_gen, num_optimization_steps, valid_gen=None, valid_steps=0, logdir='./logdir'):
     """ Train.
     
@@ -42,7 +48,7 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None, valid_
     #
     # optimize graph with gradient decent with LR of 1/t
     global_step   = tf.Variable(0, trainable=False)
-    learning_rate = 0.1
+    learning_rate = 0.005
     k             = 0.5
     decay_rate    = 1
     learning_rate = tf.train.inverse_time_decay(learning_rate, global_step, k, decay_rate)
@@ -65,19 +71,22 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None, valid_
     Z_star_sparcity = []
     for step in range(num_optimization_steps):
         X_train, Z_train           = next(train_gen)
+
         _, loss, theta, Z = sess.run( [optimizer, model.loss, model.theta, model.output], 
                                     {model.input: X_train, model.target: Z_train})
         train_loss.append(loss)
         Z_sparcity.append(np.count_nonzero(Z))
         Z_star_sparcity.append(np.count_nonzero(Z_train))
 
-        print('\rTrain step: %d. Loss %.6f.' % (step+1, loss))
+        #print('\rTrain step: %d. Loss %.6f.' % (step+1, loss))
 
         if ((step) % 500 == 0):
             X_train, Z_train    = next(train_gen)
             loss, theta, Z, We, S  = sess.run( [model.loss, model.theta, model.output, model.We, model.S], 
                                                    {model.input: X_train, model.target: Z_train})
-            print('\rSanity run: Loss %.6f theta: %.6f current avg sparsity %.6f.' % (loss, theta, np.mean(Z_sparcity)))
+            print('\rSanity run: Loss %.6f current avg sparsity %.6f.' % (loss, np.mean(Z_sparcity)))
+            print('S norm: %.6f Wd norm: %.6f thea: %.6f'%(np.linalg.norm(S,'fro'), \
+                                                           np.linalg.norm(We,'fro'), theta))
 
         if (step % 500 == 0) and valid_steps != 0:
             val_avg_loss = 0
@@ -159,7 +168,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train approximate sparse code learnign network based on paper \
     Learning Fast Approximations of Sparse Coding - http://yann.lecun.com/exdb/publis/pdf/gregor-icml-10.pdf')
 
-    parser.add_argument('-m', '--model', default='lista', type=str, choices=['lcod', 'lista'], \
+    parser.add_argument('-m', '--model', default='lcod', type=str, choices=['lcod', 'lista'], \
         help='input mode to use valid options are - "lcod" or "lista"')
 
     parser.add_argument('-tr', '--train_path', default='/../../lcod_trainset/trainset.npy', type=str,\
@@ -178,7 +187,7 @@ if __name__ == '__main__':
     parser.add_argument('-u', '--unroll_count', default=defualt_iters, type=int, nargs='+',\
         help='Amount of times to run lcod/list block')
 
-    parser.add_argument('-n', '--num_steps', default=3000, type=int,\
+    parser.add_argument('-n', '--num_steps', default=4000, type=int,\
         help='number of training steps')
 
     parser.add_argument('-vs', '--num_validsteps', default=50, type=int,\
@@ -205,10 +214,11 @@ if __name__ == '__main__':
         
         print("*"*30 + 'unroll amount {}'.format(unroll_count) + "*"*30)
         if args.model == 'lcod':
-            model = lcod.LCoD(We_shape=We_shape, unroll_count=unroll_count)
+            X, Z = next(data_gens.train_gen)
+            model = lcod.LCoD(We_shape=We_shape, unroll_count=unroll_count, We=Wd.T)
             tst = 'cod'
         else:
-            model = lista.LISTA(We_shape=We_shape, unroll_count=unroll_count)
+            model = lista.LISTA(We_shape=We_shape, unroll_count=unroll_count, We=Wd.T)
             tst = 'ista'
 
         with tf.Session() as sess:
@@ -240,6 +250,6 @@ if __name__ == '__main__':
     plt.plot(args.unroll_count, sc_error, 'g^', label=lb2)
     plt.ylabel('error')
     plt.xlabel('iter')
-    plt.legend(loc='upper left')
+    plt.legend(loc='upper right')
     plt.show()
 
