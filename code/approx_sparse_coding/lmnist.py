@@ -14,7 +14,7 @@ class Lmnist(object):
         # pass full size
         m, n                    = We_shape
         self._input             = self._locd.output
-        self._labels            = tf.placeholder(tf.float32, shape=(Lmnist.NUMBER_OF_CALSSES))
+        self._labels            = tf.placeholder(tf.float32, shape=(Lmnist.NUMBER_OF_CALSSES, 1))
         self.number_of_hidden   = number_of_hidden
         self._pred              = None
         self._logits            = None
