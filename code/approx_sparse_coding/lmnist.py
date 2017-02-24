@@ -13,7 +13,7 @@ class Lmnist(object):
         #
         # pass full size
         m, n                    = We_shape
-        self._input             = self._locd.output
+        self._input             = None
         self._labels            = tf.placeholder(tf.float32, shape=(Lmnist.NUMBER_OF_CALSSES, 1))
         self.number_of_hidden   = number_of_hidden
         self._pred              = None
@@ -25,18 +25,19 @@ class Lmnist(object):
         # FC in
         h_in_shape              = (self.number_of_hidden, m)
         self.h_in               = tf.Variable(tf.truncated_normal(h_in_shape))
-        self.b_in               = tf.Variable(tf.truncated_normal([self.number_of_hidden]))
+        self.b_in               = tf.Variable(tf.truncated_normal([self.number_of_hidden, 1]))
         #
         #FC out
         h_out_shape             = (Lmnist.NUMBER_OF_CALSSES, self.number_of_hidden)
         self.h_out              = tf.Variable(tf.truncated_normal(h_out_shape))
-        self.b_out              = tf.Variable(tf.truncated_normal([Lmnist.NUMBER_OF_CALSSES]))
+        self.b_out              = tf.Variable(tf.truncated_normal([Lmnist.NUMBER_OF_CALSSES, 1]))
 
     def build_model(self):
         self._locd.build_model()
-        i2h = tf.nn.relu(tf.matmul(self.h_in, self._input) + tf.expand_dims(self.b_in, 1))
-        self._logits = tf.reshape(tf.matmul(self.h_out, i2h) + tf.expand_dims(self.b_out, 1), [Lmnist.NUMBER_OF_CALSSES])
-        self._pred = tf.nn.softmax(self._logits)
+        self._input = self._locd.output
+        i2h          = tf.nn.relu(tf.matmul(self.h_in, self._input) + self.b_in)
+        self._logits = tf.matmul(self.h_out, i2h) + self.b_out
+        self._pred   = tf.nn.softmax(self._logits, dim=0)
 
 
     @property

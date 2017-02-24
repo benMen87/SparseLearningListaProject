@@ -22,11 +22,11 @@ class LISTA(ApproxSC):
             #
             # warm start
             L           = max(abs(np.linalg.eigvals(np.matmul(We, We.T))))
-            self._theta = tf.Variable(tf.constant(0.5/L, dtype=tf.float32), name='theta')
+            self._theta = tf.Variable(tf.constant(0.5/L, shape=[m,1], dtype=tf.float32), name='theta')
             self._We    = tf.Variable(We/L, name='We', dtype=tf.float32)
             self._S     = tf.Variable(np.eye(m) - np.matmul(We/L, We.T), dtype=tf.float32)
         else:
-            self._theta = tf.Variable(tf.truncated_normal([1]), name='theta')
+            self._theta = tf.Variable(tf.truncated_normal([m, 1]), name='theta')
             self._S     = tf.Variable( tf.truncated_normal([m, m]), name='S')
             self._We    = tf.Variable( tf.truncated_normal([m,n]), name='We', dtype=tf.float32)
  

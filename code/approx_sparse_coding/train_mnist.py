@@ -95,7 +95,13 @@ def messure_calssify_accuracy(data_gen, sess, model):
     labels      = []
     iter = 0
     for im, label in data_gen:
-        pred = sess.run([model.predict], feed_dict={model.input: im, model.labels: label})
+
+        if np.ndim(im) == 1:
+            im = im[:, np.newaxis]
+        if np.ndim(label) == 1:
+            label = label[:, np.newaxis]
+
+        pred, Z, l_Z = sess.run([model.predict, model.input, model._locd.output], feed_dict={model.input: im, model.labels: label})
         predictions.append(pred)
         labels.append(label)
         iter+=1
@@ -121,28 +127,28 @@ def display_atoms(Wd, patch_size):
 g = tf.Graph()
 with g.as_default():
     We = Wd.T    
-    model = lmnist.Lmnist(We_shape=We.shape, unroll_count=3, We=We)
+    model = lmnist.Lmnist(We_shape=We.shape, unroll_count=1, We=We)
     
     model.build_model()
     
     #
     # optimize graph with gradient decent with LR of 1/t
     global_step   = tf.Variable(0, trainable=False)
-    learning_rate = 0.005
+    learning_rate = 0.05
     k             = 0.5
     decay_rate    = 1
     learning_rate = tf.train.inverse_time_decay(learning_rate, global_step, k, decay_rate)
         
     #
     # Clip gradients to avoid overflow due to recurrent nature of algorithm
-    eta = 0.2
+    eta = 0.5
     optimizer  = tf.train.GradientDescentOptimizer(learning_rate) 
-    gvs_sc        = optimizer.compute_gradients(eta*model.sparse_loss)
-    capped_sc_gvs = [(tf.clip_by_value(zero_none_grad(grad, var), -1, 1), var) for grad, var in gvs_sc]
-    gvs_clss      = optimizer.compute_gradients((1-eta)*model.classify_loss)
-    optimizer  = optimizer.apply_gradients(gvs_clss + gvs_sc)
+    #gvs_sc        = optimizer.compute_gradients(model.sparse_loss)
+    #capped_sc_gvs = [(tf.clip_by_value(zero_none_grad(grad, var), -1, 1), var) for grad, var in gvs_sc]
+    #gvs_clss      = optimizer.compute_gradients(model.classify_loss)
+    
     total_loss = eta*model.sparse_loss + (1-eta)*model.classify_loss
-
+    optimizer  = tf.train.GradientDescentOptimizer(learning_rate).minimize(total_loss)
 ########################################## TRAINING ###################################################
 print(30*'='+'Restart' + 30*'=')
 
@@ -150,19 +156,24 @@ train_loss    = []
 vld_loss      = []
 vld_clssloss  = []
 vld_scloss    = []
-number_of_steps = 3000
+number_of_steps = 50000
 with  tf.Session(graph=g) as sess:
     tf.global_variables_initializer().run()
     print('Initialized')
     for step in range(number_of_steps):
         img, Z_star, label = next(trainset_gen)
          
-        Z_star = np.reshape(Z_star, (Z_star.shape[0]))
-        _, totloss, pred, l_We = sess.run([optimizer, total_loss, model.predict, model._locd.We],
+        if np.ndim(img) == 1:
+            img = img[:, np.newaxis]
+        if np.ndim(label) == 1:
+            label = label[:, np.newaxis]
+
+        _, totloss, pred, theta = sess.run([optimizer, total_loss, model.predict, model._locd.theta],
                                  {model.input: img, model.sparse_target: Z_star, model.labels: label})
         train_loss.append(totloss)
         if (step % 100)==0:
-            print("step %d loss: %f"%(step, totloss))
+            print("step %d loss: %f,"%(step, totloss))
+            print("theta val: %.6f, predict: %d, label: %d"%(np.linalg.norm(theta), np.argmax(pred), np.argmax(label)))
 
         if (step % 1000) == 0:
             tot=0;cls=0;sc=0
@@ -178,6 +189,16 @@ with  tf.Session(graph=g) as sess:
             vld_clssloss.append(cls / valid_size)  
             vld_scloss.append(sc / valid_size)
             print('Valid run tot loss: %f class loss: %f, SC loss: %f'%(vld_loss[-1], vld_clssloss[-1], vld_scloss[-1]))
+    Z_TSNE = []
+    labels_TSNE = []
+    for i in range(400):
+        img, _, label = next(trainset_gen)
+        if np.ndim(img) == 1:
+            img = img[:, np.newaxis]
+        Z = sess.run([model._locd.output], feed_dict={model.input:img})
+        Z_TSNE.append(Z)
+        labels_TSNE.append(np.argmax(label))
+    np.savez('final_embbed', Z=Z_TSNE, L=labels_TSNE)
 
     print('='*50+'TEST RESULTS'+'='*50)
     #
@@ -186,8 +207,8 @@ with  tf.Session(graph=g) as sess:
     print('Classification test accuracy: %f' %acc)
     #
     # test SC performance
-    approx_err, sc_err, Z_lista = sparse_code_test(sess, model._locd, zip(test_im, test_sparse), 3,\
-                                  Wd, 'cod', test_im.shape[0])
+    approx_err, sc_err = sparse_code_test(sess, model._locd, zip(test_im, test_sparse), 3,\
+                                  Wd, 'cod', 50)
     print('Lcod err: %.6f, Cod err: %.6f' % (approx_err, sc_err))
 
 plt.figure(1)
@@ -206,11 +227,11 @@ plt.subplot(212)
 plt.plot(vld_scloss)
 plt.ylabel('SC loss')
 
-display_atoms(l_We, (28, 28))
+#display_atoms(l_We, (28, 28))
 
 try:
     tsne = TSNE(perplexity=30, n_components=2, init='pca', n_iter=5000)
-    two_d_embeddings = tsne.fit_transform(Z_lista[1:num_points+1, :])
+    two_d_embeddings = tsne.fit_transform(Z_lista[50, :])
     
     def plot(embeddings, labels):
       assert embeddings.shape[0] >= len(labels), 'More labels than embeddings'
@@ -221,7 +242,7 @@ try:
         pylab.annotate(label, xy=(x, y), xytext=(5, 2), textcoords='offset points',
                        ha='right', va='bottom')
     
-    numbers = ['{}'.format(np.argmax(test_label[i])) for i in range(1, num_points+1)]
+    numbers = ['{}'.format(np.argmax(test_label[i])) for i in range(50)]
 except:
     print('Somthing went wrog with TNSE')
     print("Unexpected error:", sys.exc_info()[0])

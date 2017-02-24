@@ -80,13 +80,13 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None, valid_
 
         #print('\rTrain step: %d. Loss %.6f.' % (step+1, loss))
 
-        if ((step) % 500 == 0):
+        if ((step) % 100 == 0):
             X_train, Z_train    = next(train_gen)
             loss, theta, Z, We, S  = sess.run( [model.loss, model.theta, model.output, model.We, model.S], 
                                                    {model.input: X_train, model.target: Z_train})
             print('\rSanity run: Loss %.6f current avg sparsity %.6f.' % (loss, np.mean(Z_sparcity)))
             print('S norm: %.6f Wd norm: %.6f thea: %.6f'%(np.linalg.norm(S,'fro'), \
-                                                           np.linalg.norm(We,'fro'), theta))
+                                                           np.linalg.norm(We,'fro'), np.linalg.norm(theta)))
 
         if (step % 500 == 0) and valid_steps != 0:
             val_avg_loss = 0
@@ -99,7 +99,7 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None, valid_
             val_avg_loss /= valid_steps
             valid_loss.append(val_avg_loss)
             print('Valid Loss Avg loss: %.6f.'%val_avg_loss)
-            
+    print('Theta {}'.format(theta))
     plt.figure()
     plt.subplot(211)
     plt.plot(train_loss)
@@ -136,6 +136,11 @@ def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=30
     testset_sz = 0
     for i in range(test_size):
         X_test, Z_test =  next(test_gen)
+
+        if np.ndim(X_test) == 1:
+            X_test = X_test[:, np.newaxis]
+        if np.ndim(Z_test ) == 1:
+            Z_test  = Z_test[:, np.newaxis]
         #
         # run approx SC
         Z_approx = sess.run( [model.output], 

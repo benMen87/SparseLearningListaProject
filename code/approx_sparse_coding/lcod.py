@@ -26,11 +26,11 @@ class LCoD(ApproxSC):
         if We != None:
             #
             # warm start
-            self._theta = tf.Variable(tf.constant(0.5), name='theta')
+            self._theta = tf.Variable(tf.constant(0.5,shape=[m, 1]), name='theta')
             self._We    = tf.Variable(We, name='We', dtype=tf.float32)
             self._S     = tf.Variable(np.eye(m) - np.matmul(We, We.T), dtype=tf.float32)
         else:
-            self._theta = tf.Variable(tf.truncated_normal([1]), name='theta')
+            self._theta = tf.Variable(tf.truncated_normal([m, 1]), name='theta')
             self._S     = tf.Variable( tf.truncated_normal([m, m]), name='S')
             self._We    = tf.Variable( tf.truncated_normal([m,n]), name='We', dtype=tf.float32)
 
@@ -81,7 +81,7 @@ class LCoD(ApproxSC):
         if self._loss is None:
             with tf.variable_scope('loss'):
                 self._loss = tf.nn.l2_loss(self._Zstar - self._Z, name='loss')
-                self._loss += 1e6*tf.nn.l2_loss(tf.minimum(self._theta, 0))  
+                #self._loss += 1e6*tf.nn.l2_loss(tf.minimum(self._theta, 0))  
                 #self._loss += tf.nn.l2_loss(self._theta)
                 #self._loss += 0.1*tf.nn.l2_loss(self._S)
                 #self._loss += 0.1*tf.nn.l2_loss(self._We) 
