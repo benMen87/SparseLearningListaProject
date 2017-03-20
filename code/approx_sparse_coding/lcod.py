@@ -1,7 +1,7 @@
-import tensorflow as tf
-import numpy as np
 import os
 import sys
+import tensorflow as tf
+import numpy as np
 from approx_sc import ApproxSC
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -20,9 +20,9 @@ class LCoD(ApproxSC):
             We_shape: Input X is encoded using matmul(We, X).
             unroll_size: Amount of times to repeat lcod block.
         """
-        super().__init__(We_shape, unroll_count, shrinkge_type)
-        m, n            = self._We_shape
-        self._Z         = tf.zeros([m, 1])
+        super(LCoD, self).__init__(We_shape, unroll_count, shrinkge_type)
+        m, n = self._We_shape
+        self._Z = tf.zeros([m, 1])
         if We != None:
             #
             # warm start
@@ -81,9 +81,11 @@ class LCoD(ApproxSC):
         if self._loss is None:
             with tf.variable_scope('loss'):
                 self._loss = tf.nn.l2_loss(self._Zstar - self._Z, name='loss')
-                #self._loss += 1e6*tf.nn.l2_loss(tf.minimum(self._theta, 0))  
-                #self._loss += tf.nn.l2_loss(self._theta)
-                #self._loss += 0.1*tf.nn.l2_loss(self._S)
-                #self._loss += 0.1*tf.nn.l2_loss(self._We) 
+                """
+                self._loss += 1e6*tf.nn.l2_loss(tf.minimum(self._theta, 0))  
+                self._loss += tf.nn.l2_loss(self._theta)
+                self._loss += 0.1*tf.nn.l2_loss(self._S)
+                self._loss += 0.1*tf.nn.l2_loss(self._We) 
+                """
         return self._loss
 

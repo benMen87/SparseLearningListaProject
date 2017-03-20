@@ -1,3 +1,5 @@
+import os
+import sys
 import lcod
 import lista
 import tensorflow as tf
@@ -7,6 +9,7 @@ import numpy as np
 from sparse_coding import cod, ista
 #from dict_learning.traindict import display_atoms
 
+DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 
 def tf_sparse_count(tf_vec):
     non_zeros = tf.not_equal(tf_vec, 0)
@@ -23,7 +26,8 @@ def cape_g_byname(grad, var, name, min=-1, max=1):
         grad  = tf.clip_by_value(zero_none_grad(grad, var), min, max)
     return grad
 
-def train(sess, model, train_gen, num_optimization_steps, valid_gen=None, valid_steps=0, logdir='./logdir'):
+def train(sess, model, train_gen, num_optimization_steps, valid_gen=None,
+          valid_steps=0, logdir=DIR_PATH + '/logdir'):
     """ Train.
     
     Args:
@@ -38,68 +42,77 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None, valid_
         logdir: A string. The log directory default "./logdir" .
     """
 
-    if valid_gen is None and not valid_steps == 0:
+    if valid_gen is None and valid_steps != 0:
         raise ValueError('no valid generator was given bad valid steps is not zero.')
-    
     if os.path.exists(logdir + '/train'):
         shutil.rmtree(logdir)
     if os.path.exists(logdir + '/validation'):
         shutil.rmtree(logdir)
+    if not os.path.exists(logdir +  '/plots'):
+        os.makedirs(logdir +  '/plots')
+    plotdir = logdir +  '/plots'
+    if not os.path.exists(plotdir + '/approx_sparse'):
+        os.makedirs(plotdir + '/approx_sparse')
+    approxplotdir = plotdir + '/approx_sparse'
     #
     # optimize graph with gradient decent with LR of 1/t
-    global_step   = tf.Variable(0, trainable=False)
+    global_step = tf.Variable(0, trainable=False)
     learning_rate = 0.005
-    k             = 0.5
-    decay_rate    = 1
+    k = 0.5
+    decay_rate = 1
     learning_rate = tf.train.inverse_time_decay(learning_rate, global_step, k, decay_rate)
-    
     #
     # Clip gradients to avoid overflow due to recurrent nature of algorithm
-    optimizer  = tf.train.GradientDescentOptimizer(learning_rate) 
-    gvs        = optimizer.compute_gradients(model.loss)   
+    optimizer = tf.train.GradientDescentOptimizer(learning_rate)
+    gvs = optimizer.compute_gradients(model.loss)
     capped_gvs = [(tf.clip_by_value(zero_none_grad(grad, var), -1, 1), var) for grad, var in gvs]
-    optimizer  = optimizer.apply_gradients(capped_gvs)
+    optimizer = optimizer.apply_gradients(capped_gvs)
 
     print(30*'='+'Restart' + 30*'=')
 
     tf.global_variables_initializer().run(session=sess)
     print('Initialized')
 
-    train_loss      = []
-    valid_loss      = []
-    Z_sparcity      = []
+    train_loss = []
+    valid_loss = []
+    Z_sparcity = []
     Z_star_sparcity = []
-    for step in range(num_optimization_steps):
-        X_train, Z_train           = next(train_gen)
 
-        _, loss, theta, Z = sess.run( [optimizer, model.loss, model.theta, model.output], 
-                                    {model.input: X_train, model.target: Z_train})
+    for step in range(num_optimization_steps):
+        X_train, Z_train = next(train_gen)
+
+        _, loss, theta, Z = sess.run([optimizer, model.loss, model.theta, model.output],
+                                     {model.input: X_train, model.target: Z_train})
         train_loss.append(loss)
         Z_sparcity.append(np.count_nonzero(Z))
         Z_star_sparcity.append(np.count_nonzero(Z_train))
 
         #print('\rTrain step: %d. Loss %.6f.' % (step+1, loss))
 
-        if ((step) % 100 == 0):
-            X_train, Z_train    = next(train_gen)
-            loss, theta, Z, We, S  = sess.run( [model.loss, model.theta, model.output, model.We, model.S], 
-                                                   {model.input: X_train, model.target: Z_train})
-            print('\rSanity run: Loss %.6f current avg sparsity %.6f.' % (loss, np.mean(Z_sparcity)))
-            print('S norm: %.6f Wd norm: %.6f thea: %.6f'%(np.linalg.norm(S,'fro'), \
-                                                           np.linalg.norm(We,'fro'), np.linalg.norm(theta)))
+        if (step) % 100 == 0:
+            X_train, Z_train = next(train_gen)
+            loss, theta, Z, We, S = sess.run([model.loss, model.theta,
+                                              model.output, model.We, model.S],
+                                             {model.input: X_train, model.target: Z_train})
+
+            # print('\rSanity run: Loss %.6f current avg sparsity %.6f.' %
+            #      (loss, np.mean(Z_sparcity)))
+            # print('S norm: %.6f Wd norm: %.6f thea: %.6f'%(np.linalg.norm(S,'fro'),
+            #                                                np.linalg.norm(We,'fro'),
+            #                                                np.linalg.norm(theta)))
 
         if (step % 500 == 0) and valid_steps != 0:
             val_avg_loss = 0
-            for val_step in  range(valid_steps):
+            for _ in range(valid_steps):
                 X_val, Z_val = next(valid_gen)
-                loss, Z_out = sess.run( [model.loss, model.output], 
-                                    {model.input: X_val, model.target: Z_val})
+
+                loss = sess.run(model.loss, {model.input: X_val,
+                                             model.target: Z_val})
                 val_avg_loss += loss
 
             val_avg_loss /= valid_steps
             valid_loss.append(val_avg_loss)
             print('Valid Loss Avg loss: %.6f.'%val_avg_loss)
-    print('Theta {}'.format(theta))
     plt.figure()
     plt.subplot(211)
     plt.plot(train_loss)
@@ -109,7 +122,7 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None, valid_
     plt.plot(valid_loss)
     plt.ylabel('loss')
     plt.title('Validation loss per iteration')
-    plt.savefig('Train_loss_per_iteration_{}'.format(model.unroll_count), bbox_inches='tight')
+    plt.savefig(approxplotdir + '/Train_loss_per_iteration_{}'.format(model.unroll_count), bbox_inches='tight')
 
     plt.figure()
     plt.subplot(211)
@@ -118,13 +131,12 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None, valid_
     plt.subplot(212)
     plt.plot(Z_sparcity)
     plt.title('Z sparsity iteration {}'.format(model.unroll_count))
-    plt.savefig('Sparsity_{}'.format(model.unroll_count), bbox_inches='tight')
+    plt.savefig(approxplotdir + '/Sparsity_{}'.format(model.unroll_count), bbox_inches='tight')
     
-
 def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=300):
 
     approx_sc_err = 0
-    sc_err        = 0 
+    sc_err = 0 
 
     if sparse_coder == 'cod':
         sparse_coder = cod.CoD(Wd=Wd, max_iter=iter_count)
@@ -133,9 +145,8 @@ def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=30
     else:
         raise NameError('sparse_coder should be ether "ista" or "cod"')
 
-    testset_sz = 0
     for i in range(test_size):
-        X_test, Z_test =  next(test_gen)
+        X_test, Z_test = next(test_gen)
 
         if np.ndim(X_test) == 1:
             X_test = X_test[:, np.newaxis]
@@ -160,10 +171,7 @@ def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=30
 
 
 import argparse 
-import os
-import sys
-dir_path = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(dir_path + '/..')
+sys.path.append(DIR_PATH + '/..')
 from Utils import db_tools
 
 if __name__ == '__main__':
@@ -232,8 +240,7 @@ if __name__ == '__main__':
                   train_gen=data_gens.train_gen, \
                   num_optimization_steps=args.num_steps, \
                   valid_gen=data_gens.valid_gen, \
-                  valid_steps=args.num_validsteps,\
-                  logdir=args.log_dir_path + '_{}'.format(unroll_count))
+                  valid_steps=args.num_validsteps)
 
             test_gen = db_tools.testset_gen(os.path.dirname(os.path.realpath(__file__)) + args.test_path)
             aperr, scerr = test(sess=sess, model=model, iter_count=unroll_count, \
