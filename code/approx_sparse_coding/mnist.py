@@ -7,6 +7,7 @@ class mnist(object):
        into simple FC layer and then soft max all should learn to gather.
     """
     NUMBER_OF_CALSSES = 10
+
     def __init__(self, We_shape, unroll_count, number_of_hidden=200):
 
         self.lcod             = LCoD(We_shape, unroll_count)
