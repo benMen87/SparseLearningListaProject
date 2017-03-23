@@ -16,14 +16,14 @@ class ApproxSC(object):
         self._We_shape = We_shape
         self._unroll_count = unroll_count
         self._shrinkge_type = shrinkge_type
-
-        m, n = self._We_shape
         #
         # graph i/o
-        b_dim = None if self.train_batch_size > 1 else 1
-        self._X = tf.placeholder(tf.float32, shape=(b_dim, self._We_shape[1]),
+        b_dim = self.train_batch_size
+        b_dim = None if b_dim > 1 else b_dim
+        self._X = tf.placeholder(tf.float32, shape=(b_dim, self.input_size),
                                  name='X')
-        self._Zstar = tf.placeholder(tf.float32, shape=(b_dim, self._We_shape[1]),
+        self._Zstar = tf.placeholder(tf.float32,
+                                     shape=(b_dim, self.input_size),
                                      name='Zstar')
         self._Z = None
         #
@@ -94,6 +94,14 @@ class ApproxSC(object):
         if self._We is None:
             assert('Abstract class define child We') 
         return self._We
+
+    @property
+    def input_size(self):
+        return self._We_shape[1]
+
+    @property
+    def output_size(self):
+        return self._We_shape[0]
 
     @property
     def unroll_count(self):

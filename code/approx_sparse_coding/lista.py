@@ -18,21 +18,23 @@ class LISTA(ApproxSC):
         """
         super(LISTA, self).__init__(We_shape, unroll_count,
                                     shrinkge_type, batch_size)
-        m, n = self._We_shape
         if We is not None:
             #
             # warm start
             L = max(abs(np.linalg.eigvals(np.matmul(We, We.T))))
-            self._theta = tf.Variable(tf.constant(0.5/L, shape=[1, m],
+            self._theta = tf.Variable(tf.constant(0.5/L, shape=[1, self.output_size],
                                       dtype=tf.float32), name='theta')
             self._We = tf.Variable(We.T/L, name='We', dtype=tf.float32)
-            self._S = tf.Variable(np.eye(m) - np.matmul(We.T/L, We),
+            self._S = tf.Variable(np.eye(self.input_size) - np.matmul(We.T/L, We),
                                   dtype=tf.float32)
         else:
-            self._theta = tf.Variable(tf.truncated_normal([1, m]),
+            self._theta = tf.Variable(tf.truncated_normal([1, self.output_size]),
                                       name='theta')
-            self._S = tf.Variable(tf.truncated_normal([m, m]), name='S')
-            self._We = tf.Variable(tf.truncated_normal([n, m]),
+            self._S = tf.Variable(tf.truncated_normal([self.output_size,
+                                                       self.output_size]), name='S')
+
+            self._We = tf.Variable(tf.truncated_normal([self.input_size,
+                                                        self.output_size]),
                                    name='We', dtype=tf.float32)
  
     def _lista_step(self, Z, B, S, shrink_fn):
@@ -69,8 +71,8 @@ class LISTA(ApproxSC):
         """
         if self._loss is None:
             with tf.variable_scope('loss'):
-                self._loss = tf.nn.l2_loss(self._Zstar - self._Z, name='loss')
-                self._loss /= self.train_batch_size
+                self._loss = tf.reduce_sum(tf.reduce_mean((self._Zstar -
+                                                           self._Z) ** 2, 0))
                 """
                 self._loss += 0.01*tf.nn.l2_loss(self._theta)
                 self._loss += 0.1*tf.nn.l2_loss(self._S)

@@ -28,20 +28,20 @@ class LCoD(ApproxSC):
                                    batch size of 1')
         super(LCoD, self).__init__(We_shape, unroll_count,
                                    shrinkge_type, batch_size)
-        m, n = self._We_shape
-        self._Z = tf.zeros([1, m])
+
+        self._Z = tf.zeros([1, self.output_size])
         if We is not None:
             # warm start
-            self._theta = tf.Variable(tf.constant(0.5, shape=[1, m]),
+            self._theta = tf.Variable(tf.constant(0.5, shape=[1, self.output_size]),
                                       name='theta')
             self._We = tf.Variable(We.T, name='We', dtype=tf.float32)
-            self._S = tf.Variable(np.eye(m) - np.matmul(We.T, We),
+            self._S = tf.Variable(np.eye(self.input_size) - np.matmul(We.T, We),
                                   dtype=tf.float32)
         else:
-            self._theta = tf.Variable(tf.truncated_normal([1, m]),
+            self._theta = tf.Variable(tf.truncated_normal([1, self.output_size]),
                                       name='theta')
-            self._S = tf.Variable(tf.truncated_normal([m, m]), name='S')
-            self._We = tf.Variable(tf.truncated_normal([n, m]), name='We',
+            self._S = tf.Variable(tf.truncated_normal([self.output_size, self.output_size]), name='S')
+            self._We = tf.Variable(tf.truncated_normal([self.input_size, self.output_size]), name='We',
                                    dtype=tf.float32)
 
     def _lcod_step(self, Z, B, S, shrink_fn):
