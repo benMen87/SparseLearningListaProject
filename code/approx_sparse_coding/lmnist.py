@@ -11,7 +11,7 @@ class Lmnist(object):
 
     def __init__(self, We_shape, unroll_count,
                  sc_type='lista', batch_size=None,
-                 number_of_hidden=200, We=None):
+                 number_of_hidden=100, We=None):
 
         if sc_type == 'lcod':
             self._sc_block = LCoD(We_shape, unroll_count, We,
@@ -54,9 +54,10 @@ class Lmnist(object):
     def classify_loss(self):
         if self._classify_loss is None:
             # TODO: replae with softmax_cross_entropy_with_logits??
-            self._classify_loss = tf.nn.sigmoid_cross_entropy_with_logits(
-                                  logits=self._logits, targets=self._labels)
-            self._classify_loss = tf.reduce_mean(self.classify_loss)
+            # self._classify_loss = tf.nn.softmax_cross_entropy_with_logits(
+            #                       logits=self._logits, labels=self._labels)
+            # self._classify_loss = tf.reduce_mean(self.classify_loss)
+            self._classify_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self._logits,targets=self._labels))
 
         return self._classify_loss
 
