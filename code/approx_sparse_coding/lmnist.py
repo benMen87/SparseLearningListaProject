@@ -1,4 +1,5 @@
 from lcod import LCoD
+from lista import LISTA
 import tensorflow as tf
 
 
@@ -7,9 +8,9 @@ class Lmnist(object):
        into simple FC layer and then soft max all should learn to gather.
     """
     NUMBER_OF_CALSSES = 10
-    def __init__(self, We_shape, unroll_count, number_of_hidden=200, We=None):
+    def __init__(self, We_shape, unroll_count, number_of_hidden=100, We=None):
 
-        self._locd              = LCoD(We_shape, unroll_count, We)
+        self._locd              = LISTA(We_shape, unroll_count, We)
         #
         # pass full size
         m, n                    = We_shape
