@@ -90,5 +90,3 @@ class Lmnist(object):
     @property
     def Z(self):
         return self._sc_block.output
-
-

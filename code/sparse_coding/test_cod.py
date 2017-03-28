@@ -21,7 +21,7 @@ import db_tools
 
 db_fp = os.path.dirname(os.path.realpath(__file__)) + '\\..\\images\\BSDS300-images.tgz' 
 
-train_data  = db_tools.next_patch_gen(db_fp, (10, 10), 1.0)
+train_data = db_tools.next_patch_gen(db_fp, (10, 10), 1.0)
 im = next(train_data)
 X = im.reshape(100, 1)
 

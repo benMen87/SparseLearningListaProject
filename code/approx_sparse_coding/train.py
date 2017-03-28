@@ -158,19 +158,22 @@ def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=30
     for i in range(test_size):
         X_test, Z_test = next(test_gen)
 
+        X_test = np.array(X_test)
+        Z_test = np.array(Z_test)
+
         if np.ndim(X_test) == 1:
-            X_test = X_test[:, np.newaxis]
+            X_test = X_test[:, np.newaxis].T
         if np.ndim(Z_test) == 1:
             Z_test = Z_test[:, np.newaxis]
-        #
+        # #
         # run approx SC
         Z_approx = sess.run(model.output,
-                            {model.input: X_test.T, model.target: Z_test.T})
-        Z_approx = Z_approx.T
+                            {model.input: X_test, model.target: Z_test})
+        # Z_approx = Z_approx.T
         approx_sc_err += np.sum((Z_approx - Z_test) ** 2)
         #
         # run ista/cod with specified iterations
-        Z_sc, _ = sparse_coder.fit(X_test)
+        Z_sc, _ = sparse_coder.fit(X_test.T)
         sc_err += np.sum((Z_sc - Z_test) ** 2)
 
     approx_sc_err /= test_size

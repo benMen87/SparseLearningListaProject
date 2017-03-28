@@ -47,9 +47,6 @@ class ApproxSC(object):
     def _soft_thrsh(self, B):
         double_thresh = tf.nn.relu(tf.subtract(tf.abs(B), self._theta))
         soft_thrsh_out = tf.multiply(double_thresh, tf.sign(B))
-        # soft_thrsh_out  = tf.nn.relu(tf.divide(B, self._theta) - 1)
-        # soft_thrsh_out  = tf.multiply(tf.sign(B), soft_thrsh_out)
-        # soft_thrsh_out  = tf.multiply(soft_thrsh_out, self._theta)
         return soft_thrsh_out
 
     def _double_tanh(self, B):
