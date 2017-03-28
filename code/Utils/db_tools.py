@@ -10,16 +10,18 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(dir_path + '/..')
 from sparse_coding.cod import CoD
 
+
 def next_image_gen(db_fullpath, dset_typ='train', rgb2gray=True):
 
-     db_p = tar.open(db_fullpath)
-     for f_info in db_p.getmembers():
-         if dset_typ in f_info.name and f_info.name.endswith('.jpg'):
-             img_fp = db_p.extractfile(f_info)
-             I = Image.open(img_fp)
-             if rgb2gray:
-                 I = np.asarray(I.convert('L'))
-             yield I
+    db_p = tar.open(db_fullpath)
+    for f_info in db_p.getmembers():
+        if dset_typ in f_info.name and f_info.name.endswith('.jpg'):
+            img_fp = db_p.extractfile(f_info)
+            I = Image.open(img_fp)
+            if rgb2gray:
+                I = np.asarray(I.convert('L'))
+            yield I
+
 
 def next_patch_gen(db_fullpath, patch_size, std_thrsh, dset_typ='train',  max_ppi=np.inf):
     """
@@ -42,6 +44,7 @@ def next_patch_gen(db_fullpath, patch_size, std_thrsh, dset_typ='train',  max_pp
                 continue
             yield p
 
+
 def load_train_data_to_mem(db_fullpath, patch_size, std_thrsh, train_size, dset_typ='train'):
 
     train_data = []
@@ -52,6 +55,7 @@ def load_train_data_to_mem(db_fullpath, patch_size, std_thrsh, train_size, dset_
         p = next(patch_iter)
         train_data.append(p.reshape(patch_size[0]*patch_size[1])) #collum stack patch
     return np.asarray(train_data)
+
 
 def load_maybe_build_train_set(train_fullpath, db_fullpath=None, train_size=None,
                                patch_size=None, std_thrsh=None, dset_typ='train', savefile=False):
@@ -66,26 +70,27 @@ def load_maybe_build_train_set(train_fullpath, db_fullpath=None, train_size=None
         #
         # We may have some or all the patches we need saved in correct format
         saved_train_data = np.empty(shape=(0, patch_size[0]*patch_size[1]))
-        #if exists load it
+        # if exists load it
         if os.path.isfile(train_fullpath):
-            try: 
+            try:
                 saved_train_data = np.load(train_fullpath)
                 train_size -= saved_train_data.shape[0]
                 if train_size <= 0:
                     return saved_train_data
             except:
-                print('Error when loading train-set will try to rebuild train set') 
+                print('Error when loading train-set will try to rebuild train set')
         # else build it
-        train_data = load_train_data_to_mem(db_fullpath, patch_size, std_thrsh, train_size, dset_typ)
+        train_data = load_train_data_to_mem(db_fullpath, patch_size, std_thrsh,
+                                            train_size, dset_typ)
         train_data = np.append(train_data, saved_train_data, axis=0)
         if savefile:
             np.save(train_fullpath, train_data)
-        
         return train_data
 
 ##############################################################
 #                   Tools for Lista/LCoD                     #
 ##############################################################
+
 
 def load_dictioary(dict_path):
     try:
@@ -94,6 +99,7 @@ def load_dictioary(dict_path):
     except:
         raise FileNotFoundError('Cannot find dictionary in specified path %s'%dict_path)
 
+
 def load_data_set(dataset_path):
     try:
         data_set = np.load(dataset_path)
@@ -101,19 +107,22 @@ def load_data_set(dataset_path):
     except:
         raise FileNotFoundError('Cannot find dictionary in specified path %s'%dataset_path)
 
+
 def load_dataset_and_dict(datapath, dictpath):
 
-    Wd   = load_dictioary(dictpath)
+    Wd = load_dictioary(dictpath)
     patches = load_data_set(datapath)
 
-    set_size, patch_size  = patches.shape
+    set_size, patch_size = patches.shape
     atom_size, atom_count = Wd.shape
-     
-    if not patch_size == atom_size:
-        raise ValueError('There is a mismatch between Dictionary and data set the length of the diction and the size of \
-        the patches should be equal. Also use the dictionary that was learned over this data set.')
 
+    if not patch_size == atom_size:
+        raise ValueError('There is a mismatch between Dictionary and data set\
+                         the length of the diction and the size of \
+                         the patches should be equal. Also use the dictionary\
+                         that was learned over this data set.')
     return Wd, patches
+
 
 def compute_patch_sc_pydict(patch_set, Wd):
     sparse_rep = []
@@ -123,79 +132,104 @@ def compute_patch_sc_pydict(patch_set, Wd):
         Z, _ = sparse_code.run_cod(X=patch)
         sparse_rep.append(Z)
     sparse_rep = np.asarray(sparse_rep)
-    return {'X':patch_set, 'Y':sparse_rep}
-   
+    return {'X': patch_set, 'Y': sparse_rep}
+
+
 def basic_X_Z_gen(input, labels, run_once=False):
-   while True:
-    for (X, Z) in zip(input, labels):
-        if np.ndim(X) == 1:
-            X = X[:, np.newaxis]
-        if np.ndim(Z) == 1:
-            Z = Z[:, np.newaxis]
-        yield (X, Z)
-    else:
-        if run_once:
-            break
+    while True:
+        for (X, Z) in zip(input, labels):
+            yield (X, Z)
+        else:
+            if run_once:
+                break
+
+
+def batch_X_Z_gen(input, labels, batch_size=1, run_once=False):
+    basic_gen = basic_X_Z_gen(input, labels, run_once)
+
+    batch_X = []
+    batch_Z = []
+
+    for X, Z in basic_gen:
+
+        if np.ndim(X) > 1:
+            X = np.squeeze(X)
+        if np.ndim(Z) > 1:
+            Z = np.squeeze(Z)
+
+        batch_X.append(X)
+        batch_Z.append(Z)
+
+        if len(batch_X) == batch_size:
+            yield batch_X, batch_Z
+            batch_X = []
+            batch_Z = []
+
 
 def testset_gen(data_test_path, run_once=True):
     dt = np.load(data_test_path)
     data_dict = dt.item()
 
-    input   = data_dict['X']
-    labels  = data_dict['Y'] 
+    input = data_dict['X']
+    labels = data_dict['Y']
 
     input -= np.mean(input, axis=1, keepdims=True)
     input /= np.std(input, axis=1, keepdims=True)
 
     return basic_X_Z_gen(input, labels, True)
-        
-def trainset_gen(data_train_path, valid_ratio=0.2):
+
+
+def trainset_gen(data_train_path, valid_ratio=0.2, batch_size=1):
     dt = np.load(data_train_path)
     data_dict = dt.item()
 
     train_offset = int(valid_ratio*len(data_dict['X']))
 
-    input   = data_dict['X']
-    labels  = data_dict['Y'] 
+    input = data_dict['X']
+    labels = data_dict['Y']
 
     input -= np.mean(input, axis=1, keepdims=True)
     input /= np.std(input, axis=1, keepdims=True)
     #
     # random shuffle
-    #permutation = np.random.permutation(labels.shape[0])
-    #input = input[permutation, :]
-    #labels = labels[permutation, :]
+    # permutation = np.random.permutation(labels.shape[0])
+    # input = input[permutation, :]
+    # labels = labels[permutation, :]
+    trainset_gen = batch_X_Z_gen(input[train_offset:], labels[train_offset:],
+                                 batch_size=batch_size)
+    validset_gen = batch_X_Z_gen(input[:train_offset], labels[:train_offset])
 
-    trainset_gen = basic_X_Z_gen(input[train_offset:], labels[train_offset:])
-    validset_gen = basic_X_Z_gen(input[:train_offset], labels[:train_offset])
-
-    Datagens= namedtuple('Generators', 'train_gen valid_gen')
+    Datagens = namedtuple('Generators', 'train_gen valid_gen')
     if valid_ratio != 0:
-        ret_gens =  Datagens(train_gen=trainset_gen, valid_gen=validset_gen)
+        ret_gens = Datagens(train_gen=trainset_gen, valid_gen=validset_gen)
     else:
-        ret_gens =  Datagens(train_gen=trainset_gen, valid_gen=None)
-    return ret_gens 
+        ret_gens = Datagens(train_gen=trainset_gen, valid_gen=None)
+    return ret_gens
 
 
-def build_approx_sc_learnig_data(data_train_path, data_test_path, dict_train_path, dict_test_path, outpath): 
+def build_approx_sc_learnig_data(data_train_path, data_test_path,
+                                 dict_train_path, dict_test_path, outpath):
     """
     """
-
     #
-    #training data
+    # training data
     if not os.path.isfile(outpath + '/trainset.npy'):
-        Wd, patches = load_dataset_and_dict(datapath=data_train_path, dictpath=dict_train_path)
+        Wd, patches = load_dataset_and_dict(datapath=data_train_path,
+                                            dictpath=dict_train_path)
         patches -= np.mean(patches, axis=1, keepdims=True)
         patches /= np.std(patches, axis=1, keepdims=True)
 
         data_lable_dict = compute_patch_sc_pydict(patch_set=patches, Wd=Wd)
         np.save(outpath + '/trainset.npy', data_lable_dict)
     else:
-        print('trainset: {} \n exists already please rename or change dir if you wish to create a new one'.format(outpath + '/trainset.npy'))
+        print('trainset: {} \n exists already please rename or change dir if \
+              you wish to create a new one'.format(outpath + '/trainset.npy'))
     #
-    #test data
-    if not data_test_path == '' and not os.path.isfile(outpath + '/testset.npy'):
-        Wd, patches = load_dataset_and_dict(datapath=data_test_path, dictpath=dict_test_path)
+    # test data
+    if not data_test_path == '' and \
+       not os.path.isfile(outpath + '/testset.npy'):
+        Wd, patches = load_dataset_and_dict(datapath=data_test_path,
+                                            dictpath=dict_test_path)
         patches -= np.mean(patches, axis=1, keepdims=True)
         patches /= np.std(patches, axis=1, keepdims=True)
 
