@@ -9,8 +9,6 @@ class Lmnist(object):
     """
     NUMBER_OF_CALSSES = 10
 
-    def __init__(self, We_shape, unroll_count, number_of_hidden=200, We=None):
-
     def __init__(self, We_shape, unroll_count,
                  sc_type='lista', batch_size=None,
                  number_of_hidden=100, We=None):
@@ -25,6 +23,7 @@ class Lmnist(object):
                                    batch_size=batch_size)
         else:
             raise NameError('Sparse code block {}'.format(sc_type))
+        batch_size = None if batch_size > 1 else batch_size
         #
         # model vars
         self._input = None

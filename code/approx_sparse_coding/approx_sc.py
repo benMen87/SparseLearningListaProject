@@ -12,7 +12,7 @@ class ApproxSC(object):
             We_shape: Input X is encoded using matmul(We, X).
             unroll_size: Amount of times to repeat lcod block.
         """
-        self.train_batch_size = batch_size
+        self.train_batch_size = np.int32(batch_size)
         self._We_shape = We_shape
         self._unroll_count = unroll_count
         self._shrinkge_type = shrinkge_type

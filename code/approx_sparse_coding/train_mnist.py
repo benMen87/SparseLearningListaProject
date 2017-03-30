@@ -26,12 +26,12 @@ from dict_learning import traindict
 parser = argparse.ArgumentParser()
 
 parser.add_argument('-b', '--batch_size', default=1, type=int)
-parser.add_argument('-n', '--number_epoch', default=100000, type=int)
+parser.add_argument('-n', '--number_epoch', default=1, type=int)
 parser.add_argument('-e', '--eta', type=float, default=0.1,
                     help='loss = eta*loss_SC+(1-eta)loss_MNIST')
 parser.add_argument('-lr', '--learning_rate', default=0.005, type=float)
 parser.add_argument('-m', '--model', default='lista', help='lcod/lista')
-parser.add_argument('-u', '--unroll_count', default=3)
+parser.add_argument('-u', '--unroll_count', default=3, type=int)
 parser.add_argument('-w', '--warm_restart', type=bool, default=True)
 
 args = parser.parse_args()
@@ -216,7 +216,7 @@ else:
 
 model = lmnist.Lmnist(We_shape=We.shape, unroll_count=args.unroll_count,
                       We=We, sc_type=args.model,
-                      batch_size=None if batch_size > 1 else 1)
+                      batch_size=batch_size)
 model.build_model()
 #
 # optimize graph with gradient decent with LR of 1/t
@@ -268,7 +268,7 @@ for step in range(number_of_steps):
                                  model.sparse_target: Z_star,
                                  model.labels: label})
     train_loss.append(totloss)
-    if step % 500 == 0:
+    if step % 5000 == 0:
         print("step %d loss: %f," % (step, totloss))
         print("predict: {}, label: {}".format(np.argmax(pred, axis=-1),
                                               np.argmax(label, axis=-1)))
@@ -335,7 +335,7 @@ print('Classification test accuracy: %f' % acc)
 # test SC performance
 approx_err, sc_err = sparse_code_test(sess, model.sparsecode_block,
                                       Batchgen(img=test_im, sc=test_sparse, max_cycles=6000), 3, Wd,
-                                      'cod', 50)
+                                      'lista', 50)
 print('Lcod err: %.6f, Cod err: %.6f' % (approx_err, sc_err))
 
 plt.figure(1)

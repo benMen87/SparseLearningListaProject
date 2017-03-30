@@ -2,6 +2,7 @@ import os
 import sys
 import lcod
 import lista
+import lista_conv
 import tensorflow as tf
 import shutil
 import matplotlib.pyplot as plt
@@ -124,11 +125,11 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None,
             print('Valid Loss Avg loss: %.6f.'%val_avg_loss)
     plt.figure()
     plt.subplot(211)
-    plt.plot(train_loss)
+    plt.plot(train_loss[1:])
     plt.ylabel('loss')
     plt.title('Train loss per iteration {}'.format(model.unroll_count))
     plt.subplot(212)
-    plt.plot(valid_loss)
+    plt.plot(valid_loss[1:])
     plt.ylabel('loss')
     plt.title('Validation loss per iteration')
     plt.savefig(approxplotdir + '/Train_loss_per_iteration_{}'.format(model.unroll_count), bbox_inches='tight')
@@ -146,25 +147,21 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None,
 def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=300):
 
     approx_sc_err = 0
-    sc_err = 0 
+    sc_err = 0
 
-    if sparse_coder == 'cod':
+    if sparse_coder == 'lcod':
         sparse_coder = cod.CoD(Wd=Wd, max_iter=iter_count)
-    elif sparse_coder == 'ista':
+    elif sparse_coder == 'lista' or sparse_coder == 'lista_cov':
         sparse_coder = ista.ISTA(Wd=Wd, max_iter=iter_count, verbose=False)
     else:
         raise NameError('sparse_coder should be ether "ista" or "cod"')
-
+    input_shape = (1, model.input.get_shape().as_list()[-1])
+    output_shape = (1, model.output.get_shape().as_list()[-1])
     for i in range(test_size):
         X_test, Z_test = next(test_gen)
 
-        X_test = np.array(X_test)
-        Z_test = np.array(Z_test)
-
-        if np.ndim(X_test) == 1:
-            X_test = X_test[:, np.newaxis].T
-        if np.ndim(Z_test) == 1:
-            Z_test = Z_test[:, np.newaxis]
+        X_test = np.reshape(np.array(X_test), input_shape)
+        Z_test = np.reshape(np.array(Z_test), output_shape)
         # #
         # run approx SC
         Z_approx = sess.run(model.output,
@@ -174,7 +171,7 @@ def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=30
         #
         # run ista/cod with specified iterations
         Z_sc, _ = sparse_coder.fit(X_test.T)
-        sc_err += np.sum((Z_sc - Z_test) ** 2)
+        sc_err += np.sum((Z_sc.T - Z_test) ** 2)
 
     approx_sc_err /= test_size
     sc_err /= test_size
@@ -196,19 +193,19 @@ if __name__ == '__main__':
     Learning Fast Approximations of Sparse Coding - \
     http://yann.lecun.com/exdb/publis/pdf/gregor-icml-10.pdf')
 
-    parser.add_argument('-m', '--model', default='lista', type=str,
-                        choices=['lcod', 'lista'],
-                        help='input mode to use valid options are -\
-                        "lcod" or "lista"')
-    parser.add_argument('-b', '--batch_size', default=1,
+    parser.add_argument('-m', '--model', default='lista_conv', type=str,
+                        choices=['lcod', 'lista', 'lista_conv'],
+                        help='input mode')
+
+    parser.add_argument('-b', '--batch_size', default=2,
                         type=float, help='size of train batches')
 
     parser.add_argument('-tr', '--train_path',
-                        default='/../../lcod_trainset/trainset.npy', type=str,
+                        default='/../../approx_sc_data/trainset.npz', type=str,
                         help='Path to train data')
 
     parser.add_argument('-ts', '--test_path',
-                        default='/../../lcod_testset/testset.npy', type=str,
+                        default='/../../approx_sc_data/testset.npz', type=str,
                         help='Load train data')
 
     parser.add_argument('-r', '--ratio', default=0.2, type=float,
@@ -216,6 +213,9 @@ if __name__ == '__main__':
 
     parser.add_argument('-os', '--output_size', default=100,
                         help='Size of sparse representation Z')
+
+    parser.add_argument('-nw', '--not_warm_start', action='store_true',
+                        help='if specified initlize ver randomly')
 
     parser.add_argument('-is', '--input_size', default=100,
                         help='Size of dense vector X')
@@ -231,11 +231,17 @@ if __name__ == '__main__':
                         help='Number of validation step to run every\
                         X training steps')
 
+    parser.add_argument('-ks', '--kernal_size', default=3, type=int,
+                        help='kernal size to be used in lista_conv')
+
+    parser.add_argument('-kc', '--kernal_count', default=16, type=int,
+                        help='amount of kernal to use in lista_conv')
+
     parser.add_argument('-dp', '--dictionary_path',
-                        default='/../../lcod_testset/Wd.npy')
+                        default='/../../approx_sc_data/Wd.npy')
 
     parser.add_argument('-l', '--log_dir_path',
-                        default='../../lcod_logdir/log_dir', type=str,
+                        default='../../lcod_logdir/logdir', type=str,
                         help='output directory for log files can be \
                         used with tensor board')
 
@@ -256,15 +262,27 @@ if __name__ == '__main__':
     for unroll_count in args.unroll_count:
 
         print("*"*30 + 'unroll amount {}'.format(unroll_count) + "*"*30)
+
+        if args.not_warm_start is False:
+            We = Wd.T
+        else:
+            We = None
         if args.model == 'lcod':
             X, Z = next(data_gens.train_gen)
             model = lcod.LCoD(We_shape=We_shape, unroll_count=unroll_count,
-                              We=Wd.T, batch_size=args.batch_size)
-            tst = 'cod'
-        else:
+                              We=We, batch_size=args.batch_size)
+            tst = 'lcod'
+        elif args.model == 'lista':
             model = lista.LISTA(We_shape=We_shape, unroll_count=unroll_count,
-                                We=Wd.T, batch_size=args.batch_size)
-            tst = 'ista'
+                                We=We, batch_size=args.batch_size)
+            tst = 'lista'
+        else:
+            tst = 'lista_cov'
+            model = lista_conv.LISTAConv(We_shape=We_shape,
+                                         unroll_count=unroll_count,
+                                         We=We, batch_size=args.batch_size,
+                                         kernal_size=args.kernal_size,
+                                         amount_of_kernals=args.kernal_count)
 
         with tf.Session() as sess:
             model.build_model()
@@ -286,9 +304,15 @@ if __name__ == '__main__':
     if args.model == 'lcod':
         lb1 = 'LCoD'
         lb2 = 'CoD'
-    else:
+    elif args.model == 'lista':
         lb1 = 'LISTA'
         lb2 = 'ISTA'
+    else:
+        lb1 = 'LISTAConv'
+        lb2 = 'ISTA'
+
+    file_name = DIR_PATH + '/logdir/data_result/approx_sc/error_{}'.format(args.model)
+    np.savez(file_name, approx=approx_error, sc=sc_error)
 
     plt.figure()
     plt.plot(args.unroll_count, approx_error, 'ro', label=lb1)

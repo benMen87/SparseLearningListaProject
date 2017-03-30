@@ -129,7 +129,7 @@ def compute_patch_sc_pydict(patch_set, Wd):
     sparse_code = CoD(Wd, alpha=0.5)
 
     for patch in patch_set:
-        Z, _ = sparse_code.run_cod(X=patch)
+        Z, _ = sparse_code.fit(X=patch)
         sparse_rep.append(Z)
     sparse_rep = np.asarray(sparse_rep)
     return {'X': patch_set, 'Y': sparse_rep}
@@ -168,10 +168,9 @@ def batch_X_Z_gen(input, labels, batch_size=1, run_once=False):
 
 def testset_gen(data_test_path, run_once=True):
     dt = np.load(data_test_path)
-    data_dict = dt.item()
 
-    input = data_dict['X']
-    labels = data_dict['Y']
+    input = dt['X']
+    labels = dt['Y']
 
     input -= np.mean(input, axis=1, keepdims=True)
     input /= np.std(input, axis=1, keepdims=True)
@@ -181,12 +180,11 @@ def testset_gen(data_test_path, run_once=True):
 
 def trainset_gen(data_train_path, valid_ratio=0.2, batch_size=1):
     dt = np.load(data_train_path)
-    data_dict = dt.item()
 
-    train_offset = int(valid_ratio*len(data_dict['X']))
+    train_offset = int(valid_ratio*len(dt['X']))
 
-    input = data_dict['X']
-    labels = data_dict['Y']
+    input = dt['X']
+    labels = dt['Y']
 
     input -= np.mean(input, axis=1, keepdims=True)
     input /= np.std(input, axis=1, keepdims=True)
@@ -234,4 +232,4 @@ def build_approx_sc_learnig_data(data_train_path, data_test_path,
         patches /= np.std(patches, axis=1, keepdims=True)
 
         data_lable_dict = compute_patch_sc_pydict(patch_set=patches, Wd=Wd)
-        np.save(outpath + '/testset.npy', data_lable_dict)
+        np.savez(outpath + '/testset.npy', data_lable_dict)
