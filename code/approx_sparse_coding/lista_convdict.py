@@ -5,7 +5,7 @@ import numpy as np
 from approx_sc import ApproxSC
 
 
-class LISTAConv(ApproxSC):
+class LISTAConvDict (ApproxSC):
     """description of class"""
 
     def __init__(self, We_shape, unroll_count, We=None,

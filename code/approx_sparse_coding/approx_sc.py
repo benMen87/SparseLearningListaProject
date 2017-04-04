@@ -5,7 +5,7 @@ import numpy as np
 class ApproxSC(object):
     """description of class"""
     def __init__(self, We_shape, unroll_count,
-                 shrinkge_type='soft thresh',  batch_size=1):
+                 shrinkge_type='soft thresh', shared_threshold=False, batch_size=1):
         """ Create a LCoD model.
 
         Args:
@@ -16,6 +16,7 @@ class ApproxSC(object):
         self._We_shape = We_shape
         self._unroll_count = unroll_count
         self._shrinkge_type = shrinkge_type
+        self.shared_threshold = shared_threshold
         #
         # graph i/o
         b_dim = self.train_batch_size
@@ -28,7 +29,7 @@ class ApproxSC(object):
         self._Z = None
         #
         # Trainable Parameters
-        self._theta = None
+        self._last_theta = None
         self._S = None
         self._We = None
         #
@@ -44,10 +45,8 @@ class ApproxSC(object):
         else:
             raise NotImplementedError('Double Tanh not implemented')
 
-    def _soft_thrsh(self, B):
-        double_thresh = tf.nn.relu(tf.subtract(tf.abs(B), self._theta))
-        soft_thrsh_out = tf.multiply(double_thresh, tf.sign(B))
-        return soft_thrsh_out
+    def _soft_thrsh(self, B, theta):
+        return tf.nn.relu(B-theta) - tf.nn.relu(-B-theta)
 
     def _double_tanh(self, B):
         raise NotImplementedError('Double Tanh not implemented')
@@ -73,12 +72,8 @@ class ApproxSC(object):
     def target(self):
         return self._Zstar
 
-    @property
-    def theta(self):
-        if self._theta is None:
-            assert('Abstract class define child theta') 
-
-        return self._theta
+    def _theta(self):
+            assert('Abstract class define child theta')
 
     @property
     def S(self):

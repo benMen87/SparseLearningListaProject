@@ -39,19 +39,17 @@ class ISTA(object):
         n, m  = Wd.shape
 
         Z    = np.zeros((m, 1))
-        S = np.matmul(Wd.T, Wd)
-        B = np.matmul(Wd.T, X)
-        L = max(abs(np.linalg.eigvals(S)))
+        L = max(abs(np.linalg.eigvals(np.matmul(Wd.T, Wd))))
+        S = np.eye(m) - (1/L)*np.matmul(Wd.T, Wd)
+        B = (1/L)*np.matmul(Wd.T, X)
         theta = alpha / L
 
         loss_arr = []
         for i in range(0, max_iter):
-            #logging.debug('iter %d'%i)
-            #logging.debug('loss: %f' %self.loss(Wd, X, Z))
             loss_arr.append(self.loss(Wd, X, Z))
-                
-            A = Z - ( (1/L) * (np.matmul(S,Z) - B) )
-            Zhat = self.soft_threshold(A, theta)
+
+            C = np.matmul(S, Z) + B
+            Zhat = self.soft_threshold(C, theta)
             res  = Zhat - Z
             Z = Zhat
 

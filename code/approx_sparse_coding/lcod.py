@@ -16,7 +16,7 @@ class LCoD(ApproxSC):
     """
 
     def __init__(self, We_shape, unroll_count, We=None,
-                 shrinkge_type='soft thresh', batch_size=1):
+                 shrinkge_type='soft thresh', shared_threshold=False, batch_size=1):
         """ Create a LCoD model.
 
         Args:
@@ -27,24 +27,22 @@ class LCoD(ApproxSC):
             raise NotSupportedErr('LCoD Currently only supports\
                                    batch size of 1')
         super(LCoD, self).__init__(We_shape, unroll_count,
-                                   shrinkge_type, batch_size)
-
+                                   shrinkge_type, shared_threshold, batch_size)
+        self._B = None
         self._Z = tf.zeros([1, self.output_size])
         if We is not None:
             # warm start
-            self._theta = tf.Variable(tf.constant(0.5, shape=[1, self.output_size]),
-                                      name='theta')
+
+            self._theta = [tf.Variable(tf.constant(0.5, shape=[1, self.output_size], dtype=tf.float32), name='theta') for _ in range(unroll_count)]
             self._We = tf.Variable(We.T, name='We', dtype=tf.float32)
-            self._S = tf.Variable(np.eye(self.input_size) - np.matmul(We.T, We),
+            self._S = tf.Variable(np.eye(self.output_size) - np.matmul(We, We.T),
                                   dtype=tf.float32)
         else:
-            self._theta = tf.Variable(tf.truncated_normal([1, self.output_size]),
-                                      name='theta')
             self._S = tf.Variable(tf.truncated_normal([self.output_size, self.output_size]), name='S')
             self._We = tf.Variable(tf.truncated_normal([self.input_size, self.output_size]), name='We',
                                    dtype=tf.float32)
 
-    def _lcod_step(self, Z, B, S, shrink_fn):
+    def _lcod_step(self, Z, B, S, theta, shrink_fn):
         """ LCoD step.
 
         Args:
@@ -57,7 +55,7 @@ class LCoD(ApproxSC):
         """
         #
         # run one lcod pass through
-        Z_hat = shrink_fn(B)
+        Z_hat = shrink_fn(B, theta)
         res = tf.subtract(Z_hat, Z)
         k = tf.to_int32(tf.argmax(tf.abs(res), axis=1))
         #
@@ -80,7 +78,8 @@ class LCoD(ApproxSC):
         #
         # run unrolling
         for t in range(self._unroll_count):
-            self._Z, B = self._lcod_step(self._Z, B, self._S, shrinkge_fn)
+            self._Z, B = self._lcod_step(self._Z, B, self._S,
+                                         self._theta[i], shrinkge_fn)
         self._Z = shrinkge_fn(B)
 
     @property

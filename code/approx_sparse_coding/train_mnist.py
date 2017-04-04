@@ -240,11 +240,12 @@ eta = args.eta
 # total_loss = eta*gvs_clss + (1-eta)*model.classify_loss
 
 total_loss = eta*model.sparse_loss + (1-eta)*model.classify_loss
-optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(total_loss)
+optimizer = tf.train.AdamOptimizer(learning_rate).minimize(total_loss)
 
 # total_loss = eta*tf.reduce_sum(tf.abs(model.Z)) + (1-eta)*model.classify_loss
 # optimizer = tf.train.AdagradOptimizer(learning_rate).minimize(total_loss)
 # optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(total_loss)
+
 # --------------------------------- TRAINING ---------------------------------
 
 # %%

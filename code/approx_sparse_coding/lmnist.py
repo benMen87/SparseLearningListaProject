@@ -1,5 +1,6 @@
 from lcod import LCoD
 from lista import LISTA
+from lista_conv import LISTAConv
 import tensorflow as tf
 
 
@@ -21,6 +22,11 @@ class Lmnist(object):
             self._sc_block = LISTA(We_shape, unroll_count, We,
                                    shrinkge_type='soft thresh',
                                    batch_size=batch_size)
+        elif sc_type == 'lista_conv':
+            self._sc_block = LISTAConv(We_shape, unroll_count, We,
+                                       shrinkge_type='soft thresh',
+                                       batch_size=batch_size)
+        
         else:
             raise NameError('Sparse code block {}'.format(sc_type))
         batch_size = None if batch_size > 1 else batch_size

@@ -62,18 +62,19 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None,
     #
     # optimize graph with gradient decent with LR of 1/t
     global_step = tf.Variable(0, trainable=False)
-    learning_rate = 0.005
+    learning_rate = 0.001
     k = 0.5
     decay_rate = 1
     learning_rate = tf.train.inverse_time_decay(learning_rate, global_step,
                                                 k, decay_rate)
     #
     # Clip gradients to avoid overflow due to recurrent nature of algorithm
-    optimizer = tf.train.GradientDescentOptimizer(learning_rate)
-    gvs = optimizer.compute_gradients(model.loss)
-    capped_gvs = [(tf.clip_by_value(zero_none_grad(grad, var), -1, 1), var)
-                  for grad, var in gvs]
-    optimizer = optimizer.apply_gradients(capped_gvs)
+    # optimizer = tf.train.GradientDescentOptimizer(learning_rate)
+    optimizer = tf.train.AdamOptimizer(0.001).minimize(model.loss)
+    # gvs = optimizer.compute_gradients(model.loss)
+    # capped_gvs = [(tf.clip_by_value(zero_none_grad(grad, var), -10, 10), var)
+    #               for grad, var in gvs]
+    # optimizer = optimizer.apply_gradients(capped_gvs)
 
     print(30*'='+'Restart' + 30*'=')
 
@@ -88,10 +89,9 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None,
     for step in range(num_optimization_steps):
         X_train, Z_train = next(train_gen)
 
-        _, loss, theta, Z = sess.run([optimizer, model.loss,
-                                      model.theta, model.output],
-                                     {model.input: X_train,
-                                      model.target: Z_train})
+        _, loss, Z = sess.run([optimizer, model.loss, model.output],
+                              {model.input: X_train,
+                              model.target: Z_train})
         train_loss.append(loss)
         Z_sparcity.append(np.count_nonzero(Z) / len(Z))
         Z_star_sparcity.append(np.count_nonzero(Z_train) / len(Z_train))
@@ -100,10 +100,10 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None,
 
         if (step) % 100 == 0:
             X_train, Z_train = next(train_gen)
-            loss, theta, Z, We, S = sess.run([model.loss, model.theta,
-                                              model.output, model.We, model.S],
-                                             {model.input: X_train,
-                                              model.target: Z_train})
+            loss, Z, We, S = sess.run([model.loss, model.output,
+                                      model.We, model.S],
+                                      {model.input: X_train,
+                                      model.target: Z_train})
 
             # print('\rSanity run: Loss %.6f current avg sparsity %.6f.' %
             #      (loss, np.mean(Z_sparcity)))
@@ -125,7 +125,7 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None,
             print('Valid Loss Avg loss: %.6f.'%val_avg_loss)
     plt.figure()
     plt.subplot(211)
-    plt.plot(train_loss[1:])
+    plt.plot(train_loss[10:])
     plt.ylabel('loss')
     plt.title('Train loss per iteration {}'.format(model.unroll_count))
     plt.subplot(212)
@@ -156,7 +156,7 @@ def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=30
     else:
         raise NameError('sparse_coder should be ether "ista" or "cod"')
     input_shape = (1, model.input.get_shape().as_list()[-1])
-    output_shape = (1, model.output.get_shape().as_list()[-1])
+    output_shape = (1, model.output[0].get_shape().as_list()[-1])
     for i in range(test_size):
         X_test, Z_test = next(test_gen)
 
@@ -193,11 +193,11 @@ if __name__ == '__main__':
     Learning Fast Approximations of Sparse Coding - \
     http://yann.lecun.com/exdb/publis/pdf/gregor-icml-10.pdf')
 
-    parser.add_argument('-m', '--model', default='lista_conv', type=str,
+    parser.add_argument('-m', '--model', default='lista', type=str,
                         choices=['lcod', 'lista', 'lista_conv'],
                         help='input mode')
 
-    parser.add_argument('-b', '--batch_size', default=2,
+    parser.add_argument('-b', '--batch_size', default=1,
                         type=float, help='size of train batches')
 
     parser.add_argument('-tr', '--train_path',
@@ -253,8 +253,6 @@ if __name__ == '__main__':
 
     We_shape = (args.input_size, args.output_size)
 
-    data_gens = db_tools.trainset_gen(DIR_PATH + args.train_path, args.ratio,
-                                      args.batch_size)
     Wd = np.load(DIR_PATH + args.dictionary_path)
     approx_error = []
     sc_error = []
@@ -263,10 +261,16 @@ if __name__ == '__main__':
 
         print("*"*30 + 'unroll amount {}'.format(unroll_count) + "*"*30)
 
+        data_gens = db_tools.trainset_gen(DIR_PATH + args.train_path, args.ratio,
+                                          args.batch_size)
+
         if args.not_warm_start is False:
-            We = Wd.T
+            # We = Wd.T
+            We = np.random.normal(size=We_shape)
+            We /= np.linalg.norm(We, axis=1)
         else:
             We = None
+
         if args.model == 'lcod':
             X, Z = next(data_gens.train_gen)
             model = lcod.LCoD(We_shape=We_shape, unroll_count=unroll_count,
