@@ -60,9 +60,10 @@ class LISTAConv(ApproxSC):
                                   im_size,
                                   self.input_channels])
 
+        Z_reshpe = tf.transpose(Z_reshpe, [0, 2, 1, 3])
         ZcovS = tf.nn.conv2d(Z_reshpe, S, [1, 1, 1, 1], padding='SAME')
         ZcovS_maxpool = tf.reduce_mean(ZcovS, reduction_indices=[3], keep_dims=True)
-        ZcovS_flat = tf.reshape(ZcovS_maxpool, (-1, shape[1]))
+        ZcovS_flat = tf.reshape(tf.transpose(ZcovS_maxpool, [0, 2, 1, 3]), (-1, shape[1]))
         C = B + ZcovS_flat
         Z = shrink_fn(C, theta)
         return (Z, B)
