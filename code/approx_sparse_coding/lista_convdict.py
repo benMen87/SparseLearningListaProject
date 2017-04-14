@@ -6,77 +6,62 @@ from approx_sc import ApproxSC
 
 
 class LISTAConvDict (ApproxSC):
-    """description of class"""
+    """Class of approximate SC based on convolutinal dictioary.
+       x = sum(f_l*Z_l) = (circ(f_0)|circ(f_1)|...|circ(f_n))[Z_0|..|Z_n]
+       -> Wd = (circ(f_0)|circ(f_1)|...|circ(f_n)) or 1 filter with depth of n
+       -> We = (circ(f_0)|circ(f_1)|...|circ(f_n))^T or n fiters with depth of 1
+    """
 
-    def __init__(self, We_shape, unroll_count, We=None,
-                 shrinkge_type='soft thresh', batch_size=1,
-                 shared_threshold=False, kernal_size=3, amount_of_kernals=16):
+    def __init__(self, We_shape, unroll_count, filter_arr,
+                 L, batch_size=1, kernal_size=3, amount_of_kernals=16,
+                 shared_threshold=False, shrinkge_type='soft thresh'):
         """ Create a LCoD model.
 
         Args:
             We_shape: Input X is encoded using matmul(We, X).
             unroll_size: Amount of times to repeat lcod block.
         """
-        super(LISTAConv, self).__init__(We_shape, unroll_count,
-                                        shrinkge_type, shared_threshold, batch_size)
+
+        super(LISTAConvDict, self).__init__(We_shape, unroll_count,
+                                            shrinkge_type, shared_threshold, batch_size)
 
         self.input_channels = 1  # TODO: add support for RGB?
-        self.kernal_size = kernal_size
-        self.amount_of_kernals = amount_of_kernals
+        self.kernal_size = filter_arr.shape[1]
+        self.amount_of_kernals = filter_arr.shape[0]
 
-        S_shape = [self.kernal_size, self.kernal_size, self.input_channels, self.amount_of_kernals]
-        self._S = tf.Variable(tf.truncated_normal(S_shape), name='S')
-        if We is not None:
-            #
-            # warm start
-            L = max(abs(np.linalg.eigvals(np.matmul(We, We.T))))
-            self._theta = [tf.Variable(tf.constant(0.5/L, shape=[1, self.output_size], dtype=tf.float32), name='theta') for _ in range(unroll_count)]
-            self._We = tf.Variable(We.T/L, name='We', dtype=tf.float32)
-        else:
-            self._theta = [tf.Variable(tf.truncated_normal([1, self.output_size]),
-                                       name='theta') for _ in range(unroll_count)]
-
-            self._We = tf.Variable(tf.truncated_normal([self.input_size,
-                                                        self.output_size]),
-                                   name='We', dtype=tf.float32)
-
-    def _lista_step(self, Z, B, S, theta, shrink_fn):
-        """ LISTA step.
-
-        Args:
-            Z:    sparse representation of last iteration.
-            B:    result of B after last iteration.
-            shrink_fn: type of shrinkage function to use. 
-            S:         is not updated every unrolling rather via GD. 
-        Returns:
-            update Z and B
-        """
         #
-        # run one lcod pass through
-        shape = Z.get_shape().as_list()
-        im_size = tf.to_int32(tf.sqrt(tf.to_float(shape[1])))
-        Z_reshpe = tf.reshape(Z, [-1,
-                                  im_size,
-                                  im_size,
-                                  self.input_channels])
-
-        ZcovS = tf.nn.conv2d(Z_reshpe, S, [1, 1, 1, 1], padding='SAME')
-        ZcovS_maxpool = tf.reduce_mean(ZcovS, reduction_indices=[3], keep_dims=True)
-        ZcovS_flat = tf.reshape(ZcovS_maxpool, (-1, shape[1]))
-        C = B + ZcovS_flat
-        Z = shrink_fn(C, theta)
-        return (Z, B)
+        # model variables
+        self._theta = [tf.Variable(tf.constant(0.5/L,
+                                   shape=[1, self.output_size],
+                       dtype=tf.float32), name='theta')
+                       for _ in range(unroll_count)]
+        transpose_filt = np.array([f[::-1] for f in filter_arr])
+        self._Wd = tf.Variable(np.expand_dims(transpose_filt.T, axis=-1),
+                               name='Wd', dtype=tf.float32)
+        self._We = (1/L)*tf.Variable(np.expand_dims(filter_arr.T, axis=1),
+                                     name='We', dtype=tf.float32)
 
     def build_model(self):
-
-        B = tf.matmul(self._X, self._We)
         shrinkge_fn = self._shrinkge()
-        self._Z = shrinkge_fn(B, self._theta[0])
+
+        B = tf.nn.conv1d(tf.expand_dims(self._X, axis=-1),
+                         self._We, stride=1,
+                         padding='SAME', name='bias')
+        theta_2d = tf.reshape(self._theta[0], [1, self.input_size, self.amount_of_kernals])
+        self._Z.append(shrinkge_fn(B, theta_2d))
         #
         # run unrolling
         for t in range(1, self._unroll_count):
-            self._Z, B = self._lista_step(self._Z, B, self._S,
-                                          self._theta[t], shrinkge_fn)
+            conv_wd = tf.nn.conv1d(self._Z[t-1], self._Wd, stride=1,
+                                   padding='SAME', name='convWd')
+
+            conv_we = tf.nn.conv1d(conv_wd, self._We, stride=1,
+                                   padding='SAME', name='convWe')
+            res = self._Z[t-1] - conv_we
+            res_add_bias = res + B
+
+            theta_2d = tf.reshape(self._theta[t], [1, self.input_size, self.amount_of_kernals])
+            self._Z.append(shrinkge_fn(res_add_bias, theta_2d))
 
     @property
     def loss(self):
@@ -91,8 +76,9 @@ class LISTAConvDict (ApproxSC):
         return self._loss
 
     @property
-    def output(self):
-        return self._Z
+    def output(self, idx=-1):
+        return tf.reshape(tf.transpose(self._Z[idx], [0, 2, 1]),
+                          [1, self.input_size * self.amount_of_kernals])
 
     @property
     def batch_size(self):

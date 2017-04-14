@@ -3,6 +3,7 @@ import sys
 import lcod
 import lista
 import lista_conv
+import lista_convdict
 import tensorflow as tf
 import shutil
 import matplotlib.pyplot as plt
@@ -100,10 +101,10 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None,
 
         if (step) % 100 == 0:
             X_train, Z_train = next(train_gen)
-            loss, Z, We, S = sess.run([model.loss, model.output,
-                                      model.We, model.S],
-                                      {model.input: X_train,
-                                      model.target: Z_train})
+            loss, Z, We = sess.run([model.loss, model.output,
+                                    model.We],
+                                   {model.input: X_train,
+                                    model.target: Z_train})
 
             # print('\rSanity run: Loss %.6f current avg sparsity %.6f.' %
             #      (loss, np.mean(Z_sparcity)))
@@ -144,14 +145,14 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None,
     plt.savefig(approxplotdir + '/Sparsity_{}'.format(model.unroll_count), bbox_inches='tight')
 
 
-def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=300):
+def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=20):
 
     approx_sc_err = 0
     sc_err = 0
 
     if sparse_coder == 'lcod':
         sparse_coder = cod.CoD(Wd=Wd, max_iter=iter_count)
-    elif sparse_coder == 'lista' or sparse_coder == 'lista_cov':
+    elif sparse_coder == 'lista' or sparse_coder == 'lista_cov' or  sparse_coder == 'lista_convdict':
         sparse_coder = ista.ISTA(Wd=Wd, max_iter=iter_count, verbose=False)
     else:
         raise NameError('sparse_coder should be ether "ista" or "cod"')
@@ -164,8 +165,9 @@ def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=30
         Z_test = np.reshape(np.array(Z_test), output_shape)
         # #
         # run approx SC
-        Z_approx = sess.run(model.output,
-                            {model.input: X_test, model.target: Z_test})
+        Z_approx= sess.run(model.output,
+                           {model.input: X_test, model.target: Z_test})
+
         # Z_approx = Z_approx.T
         approx_sc_err += np.sum((Z_approx - Z_test) ** 2)
         #
@@ -193,19 +195,19 @@ if __name__ == '__main__':
     Learning Fast Approximations of Sparse Coding - \
     http://yann.lecun.com/exdb/publis/pdf/gregor-icml-10.pdf')
 
-    parser.add_argument('-m', '--model', default='lista', type=str,
-                        choices=['lcod', 'lista', 'lista_conv'],
+    parser.add_argument('-m', '--model', default='lista_convdict', type=str,
+                        choices=['lcod', 'lista', 'lista_conv', 'lista_convdict'],
                         help='input mode')
 
     parser.add_argument('-b', '--batch_size', default=1,
                         type=float, help='size of train batches')
 
     parser.add_argument('-tr', '--train_path',
-                        default='/../../approx_sc_data/trainset.npz', type=str,
+                        default='/../../covdict_data/trainset.npz', type=str,
                         help='Path to train data')
 
     parser.add_argument('-ts', '--test_path',
-                        default='/../../approx_sc_data/testset.npz', type=str,
+                        default='/../../covdict_data/testset.npz', type=str,
                         help='Load train data')
 
     parser.add_argument('-r', '--ratio', default=0.2, type=float,
@@ -217,14 +219,11 @@ if __name__ == '__main__':
     parser.add_argument('-nw', '--not_warm_start', action='store_true',
                         help='if specified initlize ver randomly')
 
-    parser.add_argument('-is', '--input_size', default=100,
-                        help='Size of dense vector X')
-
-    parser.add_argument('-u', '--unroll_count', default=defualt_iters,
+    parser.add_argument('-u', '--unroll_count', default=[2],
                         type=int, nargs='+',
                         help='Amount of times to run lcod/list block')
 
-    parser.add_argument('-n', '--num_steps', default=4000, type=int,
+    parser.add_argument('-n', '--num_steps', default=0, type=int,
                         help='number of training steps')
 
     parser.add_argument('-vs', '--num_validsteps', default=50, type=int,
@@ -238,7 +237,7 @@ if __name__ == '__main__':
                         help='amount of kernal to use in lista_conv')
 
     parser.add_argument('-dp', '--dictionary_path',
-                        default='/../../approx_sc_data/Wd.npy')
+                        default='/../../covdict_data/conv_dict.npy')
 
     parser.add_argument('-l', '--log_dir_path',
                         default='../../lcod_logdir/logdir', type=str,
@@ -251,9 +250,8 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    We_shape = (args.input_size, args.output_size)
-
     Wd = np.load(DIR_PATH + args.dictionary_path)
+    We_shape = Wd.T.shape
     approx_error = []
     sc_error = []
 
@@ -265,9 +263,9 @@ if __name__ == '__main__':
                                           args.batch_size)
 
         if args.not_warm_start is False:
-            # We = Wd.T
-            We = np.random.normal(size=We_shape)
-            We /= np.linalg.norm(We, axis=1)
+            We = Wd.T
+            # We = np.random.normal(size=We_shape)
+            # We /= np.linalg.norm(We, axis=1)
         else:
             We = None
 
@@ -280,6 +278,16 @@ if __name__ == '__main__':
             model = lista.LISTA(We_shape=We_shape, unroll_count=unroll_count,
                                 We=We, batch_size=args.batch_size)
             tst = 'lista'
+        elif args.model == 'lista_convdict':
+            tst = 'lista_convdict'
+            filter_arr = np.load(DIR_PATH + '/../../covdict_data/filter_arr.npy')
+            L = max(abs(np.linalg.eigvals(np.matmul(We, We.T))))
+            model = lista_convdict.LISTAConvDict(We_shape=We_shape,
+                                                 unroll_count=unroll_count,
+                                                 filter_arr=filter_arr, L=L,
+                                                 batch_size=args.batch_size,
+                                                 kernal_size=args.kernal_size,
+                                                 amount_of_kernals=args.kernal_count)
         else:
             tst = 'lista_cov'
             model = lista_conv.LISTAConv(We_shape=We_shape,
@@ -310,6 +318,9 @@ if __name__ == '__main__':
         lb2 = 'CoD'
     elif args.model == 'lista':
         lb1 = 'LISTA'
+        lb2 = 'ISTA'
+    elif args.model == 'lista_convdict':
+        lb1 = 'LISTAConvDict'
         lb2 = 'ISTA'
     else:
         lb1 = 'LISTAConv'

@@ -5,6 +5,7 @@
 *.pyproj
 *.pyc
 *.png
+*.npz
 code/approx_sparse_coding/mnist_data/test.npz
 mnist_data/train_sc.npz
 mnist_data/test_sc.npz
