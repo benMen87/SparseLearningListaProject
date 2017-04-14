@@ -24,9 +24,9 @@ class ApproxSC(object):
         self._X = tf.placeholder(tf.float32, shape=(b_dim, self.input_size),
                                  name='X')
         self._Zstar = tf.placeholder(tf.float32,
-                                     shape=(b_dim, self.input_size),
+                                     shape=(b_dim, self.output_size),
                                      name='Zstar')
-        self._Z = None
+        self._Z = []
         #
         # Trainable Parameters
         self._last_theta = None

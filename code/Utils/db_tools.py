@@ -232,4 +232,4 @@ def build_approx_sc_learnig_data(data_train_path, data_test_path,
         patches /= np.std(patches, axis=1, keepdims=True)
 
         data_lable_dict = compute_patch_sc_pydict(patch_set=patches, Wd=Wd)
-        np.savez(outpath + '/testset.npy', data_lable_dict)
+        np.save(outpath + '/testset.npy', data_lable_dict)
