@@ -76,9 +76,9 @@ class LISTAConvDict (ApproxSC):
         return self._loss
 
     @property
-    def output(self, idx=-1):
-        return tf.reshape(tf.transpose(self._Z[idx], [0, 2, 1]),
-                          [1, self.input_size * self.amount_of_kernals])
+    def output(self):
+        return tf.reshape(tf.transpose(self._Z[-1], [0, 2, 1]),
+                          [-1, self.input_size * self.amount_of_kernals])
 
     @property
     def batch_size(self):
