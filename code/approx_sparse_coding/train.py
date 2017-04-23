@@ -68,14 +68,8 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None,
     decay_rate = 1
     learning_rate = tf.train.inverse_time_decay(learning_rate, global_step,
                                                 k, decay_rate)
-    #
-    # Clip gradients to avoid overflow due to recurrent nature of algorithm
-    # optimizer = tf.train.GradientDescentOptimizer(learning_rate)
+
     optimizer = tf.train.AdamOptimizer(0.001).minimize(model.loss)
-    # gvs = optimizer.compute_gradients(model.loss)
-    # capped_gvs = [(tf.clip_by_value(zero_none_grad(grad, var), -10, 10), var)
-    #               for grad, var in gvs]
-    # optimizer = optimizer.apply_gradients(capped_gvs)
 
     print(30*'='+'Restart' + 30*'=')
 
@@ -88,6 +82,7 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None,
     Z_star_sparcity = []
 
     for step in range(num_optimization_steps):
+
         X_train, Z_train = next(train_gen)
 
         _, loss, Z = sess.run([optimizer, model.loss, model.output],
@@ -96,21 +91,6 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None,
         train_loss.append(loss)
         Z_sparcity.append(np.count_nonzero(Z) / len(Z))
         Z_star_sparcity.append(np.count_nonzero(Z_train) / len(Z_train))
-
-        # print('\rTrain step: %d. Loss %.6f.' % (step+1, loss))
-
-        if (step) % 100 == 0:
-            X_train, Z_train = next(train_gen)
-            loss, Z, We = sess.run([model.loss, model.output,
-                                    model.We],
-                                   {model.input: X_train,
-                                    model.target: Z_train})
-
-            # print('\rSanity run: Loss %.6f current avg sparsity %.6f.' %
-            #      (loss, np.mean(Z_sparcity)))
-            # print('S norm: %.6f Wd norm: %.6f thea: %.6f'%(np.linalg.norm(S,'fro'),
-            #                                                np.linalg.norm(We,'fro'),
-            #                                                np.linalg.norm(theta)))
 
         if (step % 500 == 0) and valid_steps != 0:
             val_avg_loss = 0
@@ -123,7 +103,8 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None,
 
             val_avg_loss /= valid_steps
             valid_loss.append(val_avg_loss)
-            print('Valid Loss Avg loss: %.6f.'%val_avg_loss)
+            print('iteration: %d Valid Loss Avg loss: %.6f.'%(step, val_avg_loss))
+
     plt.figure()
     plt.subplot(211)
     plt.plot(train_loss[10:])
@@ -223,10 +204,10 @@ if __name__ == '__main__':
                         type=int, nargs='+',
                         help='Amount of times to run lcod/list block')
 
-    parser.add_argument('-n', '--num_steps', default=0, type=int,
+    parser.add_argument('-n', '--num_steps', default=1, type=int,
                         help='number of training steps')
 
-    parser.add_argument('-vs', '--num_validsteps', default=50, type=int,
+    parser.add_argument('-vs', '--num_validsteps', default=500, type=int,
                         help='Number of validation step to run every\
                         X training steps')
 
@@ -259,13 +240,12 @@ if __name__ == '__main__':
 
         print("*"*30 + 'unroll amount {}'.format(unroll_count) + "*"*30)
 
-        data_gens = db_tools.trainset_gen(DIR_PATH + args.train_path, args.ratio,
+        data_gens = db_tools.trainset_gen(DIR_PATH + args.train_path,
+                                          args.num_validsteps,
                                           args.batch_size)
 
         if args.not_warm_start is False:
             We = Wd.T
-            # We = np.random.normal(size=We_shape)
-            # We /= np.linalg.norm(We, axis=1)
         else:
             We = None
 
@@ -328,7 +308,9 @@ if __name__ == '__main__':
 
     file_name = DIR_PATH + '/logdir/data_result/approx_sc/error_{}'.format(args.model)
     np.savez(file_name, approx=approx_error, sc=sc_error)
-
+    print('SC errro {}'.format(sc_error))
+    print('Approx errro {}'.format(approx_error))
+    
     plt.figure()
     plt.plot(args.unroll_count, approx_error, 'ro', label=lb1)
     plt.plot(args.unroll_count, sc_error, 'g^', label=lb2)

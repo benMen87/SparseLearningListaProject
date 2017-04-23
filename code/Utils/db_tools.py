@@ -127,8 +127,11 @@ def load_dataset_and_dict(datapath, dictpath):
 def compute_patch_sc_pydict(patch_set, Wd):
     sparse_rep = []
     sparse_code = CoD(Wd, alpha=0.5)
-
+    i = 0
     for patch in patch_set:
+        i += 1
+        if i % 100 == 0:
+            print('patch number %d'%i)
         Z, _ = sparse_code.fit(X=patch)
         sparse_rep.append(Z)
     sparse_rep = np.asarray(sparse_rep)
@@ -178,10 +181,8 @@ def testset_gen(data_test_path, run_once=True):
     return basic_X_Z_gen(input, labels, True)
 
 
-def trainset_gen(data_train_path, valid_ratio=0.2, batch_size=1):
+def trainset_gen(data_train_path, valid_size=500, batch_size=1):
     dt = np.load(data_train_path)
-
-    train_offset = int(valid_ratio*len(dt['X']))
 
     input = dt['X']
     labels = dt['Y']
@@ -190,15 +191,18 @@ def trainset_gen(data_train_path, valid_ratio=0.2, batch_size=1):
     input /= np.std(input, axis=1, keepdims=True)
     #
     # random shuffle
-    # permutation = np.random.permutation(labels.shape[0])
-    # input = input[permutation, :]
-    # labels = labels[permutation, :]
-    trainset_gen = batch_X_Z_gen(input[train_offset:], labels[train_offset:],
+    permutation = np.random.permutation(labels.shape[0])
+    permutation = np.random.permutation(labels.shape[0])
+
+    input = input[permutation, :]
+    labels = labels[permutation, :]
+
+    trainset_gen = batch_X_Z_gen(input[valid_size:], labels[valid_size:],
                                  batch_size=batch_size)
-    validset_gen = batch_X_Z_gen(input[:train_offset], labels[:train_offset])
+    validset_gen = batch_X_Z_gen(input[:valid_size], labels[:valid_size])
 
     Datagens = namedtuple('Generators', 'train_gen valid_gen')
-    if valid_ratio != 0:
+    if valid_size != 0:
         ret_gens = Datagens(train_gen=trainset_gen, valid_gen=validset_gen)
     else:
         ret_gens = Datagens(train_gen=trainset_gen, valid_gen=None)
@@ -206,19 +210,21 @@ def trainset_gen(data_train_path, valid_ratio=0.2, batch_size=1):
 
 
 def build_approx_sc_learnig_data(data_train_path, data_test_path,
-                                 dict_train_path, dict_test_path, outpath):
+                                 dict_train_path, dict_test_path, outpath,
+                                 train_size=100000, test_size=30000):
     """
     """
     #
     # training data
     if not os.path.isfile(outpath + '/trainset.npy'):
+        print('building new trainset')
         Wd, patches = load_dataset_and_dict(datapath=data_train_path,
                                             dictpath=dict_train_path)
         patches -= np.mean(patches, axis=1, keepdims=True)
         patches /= np.std(patches, axis=1, keepdims=True)
 
         data_lable_dict = compute_patch_sc_pydict(patch_set=patches, Wd=Wd)
-        np.save(outpath + '/trainset.npy', data_lable_dict)
+        np.savez(outpath + '/trainset', X=data_lable_dict['X'], Y=data_lable_dict['Y'])
     else:
         print('trainset: {} \n exists already please rename or change dir if \
               you wish to create a new one'.format(outpath + '/trainset.npy'))
@@ -232,4 +238,4 @@ def build_approx_sc_learnig_data(data_train_path, data_test_path,
         patches /= np.std(patches, axis=1, keepdims=True)
 
         data_lable_dict = compute_patch_sc_pydict(patch_set=patches, Wd=Wd)
-        np.save(outpath + '/testset.npy', data_lable_dict)
+        np.savez(outpath + '/testset', X=data_lable_dict['X'], Y=data_lable_dict['Y'])
