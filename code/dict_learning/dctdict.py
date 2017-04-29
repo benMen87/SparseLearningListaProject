@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 
 def display_atoms(Wd, patch_size):
 
@@ -31,4 +32,4 @@ atom_count = 600
 patch_size = 10
 DCT = buildDCT(patch_size, atom_count)
 DCT = DCT[:,0:atom_count]
-np.save('/home/benmen/Msc3yr/Sparse/SparseLearningListaProject/dct_data/Wd', DCT)
+np.save(DIR_PATH + '/../../dct_data/Wd', DCT)
