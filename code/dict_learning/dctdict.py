@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-
+import os
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 
 def display_atoms(Wd, patch_size):
