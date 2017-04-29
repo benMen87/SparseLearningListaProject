@@ -113,44 +113,44 @@ if __name__ == '__main__':
     # Hyper parameters
     PATCH_SIZE  = (10, 10)
     STD_THRESH  = 1 
-    TRAIN_SIZE  = 30000 #amount of actual patches 
+    TRAIN_SIZE  = 100000 #amount of actual patches 
     MAX_ITER    = 150000
     ALPHA       = 0.5
     #
     # Load patches
-    db_fp       = os.path.dirname(os.path.realpath(__file__)) + '\\..\\..\\images\\BSDS300-images.tgz' 
-    train_fp    = os.path.dirname(os.path.realpath(__file__)) + '\\..\\..\\patches_for_traindict\\maxiter_{}_size_{}_thrsh_{}_train_set.npy'.format(MAX_ITER, TRAIN_SIZE, STD_THRESH) 
+    db_fp       = os.path.dirname(os.path.realpath(__file__)) + '/../../images/BSDS300-images.tgz' 
+    train_fp    = os.path.dirname(os.path.realpath(__file__)) + '/../../patches_for_traindict/train.npy'
     train_data  = db_tools.load_maybe_build_train_set(train_fullpath=train_fp, db_fullpath=db_fp, train_size=TRAIN_SIZE,
                                            patch_size=PATCH_SIZE, std_thrsh=STD_THRESH, savefile=True)
 
     #
-    # Build test data probably no use for it in this stage
-    db_fp       = os.path.dirname(os.path.realpath(__file__)) + '\\..\\..\\images\\BSDS300-images.tgz' 
-    TEST_SIZE   = np.uint32(TRAIN_SIZE*0.4)
-    test_fp    = os.path.dirname(os.path.realpath(__file__)) + '\\..\\..\\patches_for_traindict\\maxiter_{}_size_{}_thrsh_{}_test_set.npy'.format(MAX_ITER, TRAIN_SIZE, STD_THRESH) 
-    test_data  = db_tools.load_maybe_build_train_set(train_fullpath=test_fp, db_fullpath=db_fp, train_size=TRAIN_SIZE,
-                                           patch_size=PATCH_SIZE, std_thrsh=STD_THRESH, dset_typ='test', savefile=True)
+    # # Build test data probably no use for it in this stage
+    # db_fp       = os.path.dirname(os.path.realpath(__file__)) + '\\..\\..\\images\\BSDS300-images.tgz' 
+    # TEST_SIZE   = np.uint32(TRAIN_SIZE*0.4)
+    # test_fp    = os.path.dirname(os.path.realpath(__file__)) + '\\..\\..\\patches_for_traindict\\maxiter_{}_size_{}_thrsh_{}_test_set.npy'.format(MAX_ITER, TRAIN_SIZE, STD_THRESH) 
+    # test_data  = db_tools.load_maybe_build_train_set(train_fullpath=test_fp, db_fullpath=db_fp, train_size=TRAIN_SIZE,
+    #                                        patch_size=PATCH_SIZE, std_thrsh=STD_THRESH, dset_typ='test', savefile=True)
 
-    #
-    # Normalize patches
-    train_data = train_data.T
-    train_data -= np.mean(train_data, axis=0)
-    train_data /= np.std(train_data,  axis=0)
-    #
-    #learn dictionary 
-    train_dict = Traindict(max_iter=MAX_ITER, alpha=ALPHA, atom_count=100, step_size=10)
-    Wd, loss   = train_dict.learn_Wd_gd(train_data, sc_method='ista')
-    #
-    #save learn dictionary
-    learned_dict_fp = os.path.dirname(os.path.realpath(__file__)) + \
-    '\\..\\..\\learned_dict\\Wd_ISTA_iter{}_alpha{}_stdthrsh{}.py'.format(MAX_ITER, ALPHA, STD_THRESH)
-    np.save(learned_dict_fp, Wd)
-    display_atoms(Wd.T, PATCH_SIZE)
+    # #
+    # # Normalize patches
+    # train_data = train_data.T
+    # train_data -= np.mean(train_data, axis=0)
+    # train_data /= np.std(train_data,  axis=0)
+    # #
+    # #learn dictionary 
+    # train_dict = Traindict(max_iter=MAX_ITER, alpha=ALPHA, atom_count=100, step_size=10)
+    # Wd, loss   = train_dict.learn_Wd_gd(train_data, sc_method='ista')
+    # #
+    # #save learn dictionary
+    # learned_dict_fp = os.path.dirname(os.path.realpath(__file__)) + \
+    # '\\..\\..\\learned_dict\\Wd_ISTA_iter{}_alpha{}_stdthrsh{}.py'.format(MAX_ITER, ALPHA, STD_THRESH)
+    # np.save(learned_dict_fp, Wd)
+    # display_atoms(Wd.T, PATCH_SIZE)
 
-    plt.plot(loss)
-    plt.ylabel('loss')
-    plt.title('loss per iteration')
-    plt.show()
+    # plt.plot(loss)
+    # plt.ylabel('loss')
+    # plt.title('loss per iteration')
+    # plt.show()
 
     
 

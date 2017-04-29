@@ -216,7 +216,7 @@ def build_approx_sc_learnig_data(data_train_path, data_test_path,
     """
     #
     # training data
-    if not os.path.isfile(outpath + '/trainset.npy'):
+    if not os.path.isfile(outpath + '/trainset.npz'):
         print('building new trainset')
         Wd, patches = load_dataset_and_dict(datapath=data_train_path,
                                             dictpath=dict_train_path)
@@ -231,7 +231,7 @@ def build_approx_sc_learnig_data(data_train_path, data_test_path,
     #
     # test data
     if not data_test_path == '' and \
-       not os.path.isfile(outpath + '/testset.npy'):
+       not os.path.isfile(outpath + '/testset.npz'):
         Wd, patches = load_dataset_and_dict(datapath=data_test_path,
                                             dictpath=dict_test_path)
         patches -= np.mean(patches, axis=1, keepdims=True)

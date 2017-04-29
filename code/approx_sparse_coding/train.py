@@ -176,19 +176,20 @@ if __name__ == '__main__':
     Learning Fast Approximations of Sparse Coding - \
     http://yann.lecun.com/exdb/publis/pdf/gregor-icml-10.pdf')
 
-    parser.add_argument('-m', '--model', default='lista_convdict', type=str,
-                        choices=['lcod', 'lista', 'lista_conv', 'lista_convdict'],
+    parser.add_argument('-m', '--model', default='lista_convdic_dct', type=str,
+                        choices=['lcod', 'lista', 'lista_conv',
+                                 'lista_convdict', 'lista_convdic_dct'],
                         help='input mode')
 
     parser.add_argument('-b', '--batch_size', default=1,
                         type=float, help='size of train batches')
 
     parser.add_argument('-tr', '--train_path',
-                        default='/../../covdict_data/trainset.npz', type=str,
+                        default='/../../dct_data/trainset.npz', type=str,
                         help='Path to train data')
 
     parser.add_argument('-ts', '--test_path',
-                        default='/../../covdict_data/testset.npz', type=str,
+                        default='/../../dct_data/testset.npz', type=str,
                         help='Load train data')
 
     parser.add_argument('-r', '--ratio', default=0.2, type=float,
@@ -218,19 +219,25 @@ if __name__ == '__main__':
                         help='amount of kernal to use in lista_conv')
 
     parser.add_argument('-dp', '--dictionary_path',
-                        default='/../../covdict_data/conv_dict.npy')
+                        default='/../../dct_data/Wd.npy')
 
     parser.add_argument('-l', '--log_dir_path',
                         default='../../lcod_logdir/logdir', type=str,
                         help='output directory for log files can be \
                         used with tensor board')
 
-    parser.add_argument('-o', '--output_dir_path', default='', type=str,
+    parser.add_argument('-o', '--output_dir_path',
+                        default='/../../dct_data/saved_model/',
+                        type=str,
+                        help='output directory to save model if non is given\
+                              model wont be saved')
+    # /../../dct_data/saved_model/
+    parser.add_argument('-lm', '--load_model_path',
+                        default='', type=str,
                         help='output directory to save model if non is given\
                               model wont be saved')
 
     args = parser.parse_args()
-
     Wd = np.load(DIR_PATH + args.dictionary_path)
     We_shape = Wd.T.shape
     approx_error = []
@@ -266,8 +273,31 @@ if __name__ == '__main__':
                                                  unroll_count=unroll_count,
                                                  filter_arr=filter_arr, L=L,
                                                  batch_size=args.batch_size,
+                                                 kernal_size=args.kernal_size)
+        elif args.model == 'lista_convdic_dct':
+            tst = 'lista_convdic_dct'
+
+            init_dict = {}
+            filter_arr = []
+            if len(args.load_model_path) != 0:
+                mWd = np.load(DIR_PATH + args.load_model_path + 'Wd.npy')
+                We = np.load(DIR_PATH + args.load_model_path + 'We.npy')
+                theta = np.load(DIR_PATH + args.load_model_path + 'theta.npy')
+                init_dict['Wd'] = Wd
+                init_dict['We'] = We
+                init_dict['theta'] = theta
+            else:
+                filter_arr = [np.random.randn(args.kernal_size) for _ in range(args.kernal_count)]
+                filter_arr = np.array([f/np.linalg.norm(f) for f in filter_arr])
+                # TODO: Calculate We shape based on filters We_shape = 
+                We_shape = (len(filter_arr)*We_shape[1], We_shape[1])
+            L = max(abs(np.linalg.eigvals(np.matmul(We, We.T))))
+            model = lista_convdict.LISTAConvDict(We_shape=We_shape,
+                                                 unroll_count=unroll_count,
+                                                 filter_arr=filter_arr, L=L,
+                                                 batch_size=args.batch_size,
                                                  kernal_size=args.kernal_size,
-                                                 amount_of_kernals=args.kernal_count)
+                                                 init_params_dict=init_dict)
         else:
             tst = 'lista_cov'
             model = lista_conv.LISTAConv(We_shape=We_shape,
@@ -289,6 +319,16 @@ if __name__ == '__main__':
                                 iter_count=unroll_count,
                                 test_gen=test_gen, Wd=Wd, sparse_coder=tst)
 
+            if len(args.output_dir_path):
+                outpth = DIR_PATH + args.output_dir_path
+                if args.model == 'lista_convdic_dct':
+                    Wd = model.Wd
+                    np.save(outpth + 'Wd', Wd)
+                We = model.We
+                theta = model._theta
+                np.save(outpth + 'We', We)
+                np.save(outpth + 'theta', theta)
+
         tf.reset_default_graph()
         approx_error.append(aperr)
         sc_error.append(scerr)
@@ -302,6 +342,9 @@ if __name__ == '__main__':
     elif args.model == 'lista_convdict':
         lb1 = 'LISTAConvDict'
         lb2 = 'ISTA'
+    elif args.model == 'lista_convdic_dct':
+        lb1 = 'LISTAConvDictDct'
+        lb2 = 'ISTA'
     else:
         lb1 = 'LISTAConv'
         lb2 = 'ISTA'
@@ -310,7 +353,7 @@ if __name__ == '__main__':
     np.savez(file_name, approx=approx_error, sc=sc_error)
     print('SC errro {}'.format(sc_error))
     print('Approx errro {}'.format(approx_error))
-    
+
     plt.figure()
     plt.plot(args.unroll_count, approx_error, 'ro', label=lb1)
     plt.plot(args.unroll_count, sc_error, 'g^', label=lb2)
