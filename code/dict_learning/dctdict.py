@@ -27,5 +27,8 @@ def buildDCT(b_dim, K):
         DCT[:, k] = V / np.linalg.norm(V)
     return np.kron(DCT, DCT)
 
-DCT = buildDCT(10, 128)
+atom_count = 600
+patch_size = 10
+DCT = buildDCT(patch_size, atom_count)
+DCT = DCT[:,0:atom_count]
 np.save('/home/benmen/Msc3yr/Sparse/SparseLearningListaProject/dct_data/Wd', DCT)
