@@ -13,8 +13,9 @@ class LISTAConvDict (ApproxSC):
     """
 
     def __init__(self, We_shape, unroll_count, filter_arr,
-                 L, batch_size=1, kernal_size=3, amount_of_kernals=16,
-                 shared_threshold=False, shrinkge_type='soft thresh'):
+                 L, batch_size=1, kernal_size=3,
+                 shared_threshold=False, shrinkge_type='soft thresh',
+                 init_params_dict={}):
         """ Create a LCoD model.
 
         Args:
@@ -31,15 +32,23 @@ class LISTAConvDict (ApproxSC):
 
         #
         # model variables
-        self._theta = [tf.Variable(tf.constant(0.5/L,
-                                   shape=[1, self.output_size],
-                       dtype=tf.float32), name='theta')
-                       for _ in range(unroll_count)]
-        transpose_filt = np.array([f[::-1] for f in filter_arr])
-        self._Wd = tf.Variable(np.expand_dims(transpose_filt.T, axis=-1),
-                               name='Wd', dtype=tf.float32)
-        self._We = (1/L)*tf.Variable(np.expand_dims(filter_arr.T, axis=1),
-                                     name='We', dtype=tf.float32)
+        if not init_params_dict:
+            self._theta = [tf.Variable(tf.constant(0.5/L,
+                                       shape=[1, self.output_size],
+                           dtype=tf.float32), name='theta')
+                           for _ in range(unroll_count)]
+            transpose_filt = np.array([f[::-1] for f in filter_arr])
+            self._Wd = tf.Variable(np.expand_dims(transpose_filt.T, axis=-1),
+                                   name='Wd', dtype=tf.float32)
+            self._We = (1/L)*tf.Variable(np.expand_dims(filter_arr.T, axis=1),
+                                         name='We', dtype=tf.float32)
+        else:
+            self._theta = [tf.Variable(init_params_dict['theta'], name='theta')
+                           for _ in range(unroll_count)]
+            self._Wd = tf.Variable(init_params_dict['Wd'],
+                                   name='Wd', dtype=tf.float32)
+            self._We = tf.Variable(init_params_dict['We'],
+                                   name='We', dtype=tf.float32)
 
     def build_model(self):
         shrinkge_fn = self._shrinkge()
@@ -74,6 +83,10 @@ class LISTAConvDict (ApproxSC):
                                                            self.target) ** 2, 0))
                 self._loss /= 2
         return self._loss
+
+    @property
+    def Wd(self):
+        return self._Wd
 
     @property
     def output(self):

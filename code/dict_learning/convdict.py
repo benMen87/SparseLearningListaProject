@@ -4,6 +4,7 @@ from scipy.linalg import toeplitz
 
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 
+
 def build_convdict(signal_size, filter_size=9, filter_count=16):
 
     if filter_size % 2 == 0:
