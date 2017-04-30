@@ -27,12 +27,12 @@ class LISTAConvDict (ApproxSC):
                                             shrinkge_type, shared_threshold, batch_size)
 
         self.input_channels = 1  # TODO: add support for RGB?
-        self.kernal_size = filter_arr.shape[1]
-        self.amount_of_kernals = filter_arr.shape[0]
 
         #
         # model variables
         if not init_params_dict:
+            self.kernal_size = filter_arr.shape[1]
+            self.amount_of_kernals = filter_arr.shape[0]
             self._theta = [tf.Variable(tf.constant(0.5/L,
                                        shape=[1, self.output_size],
                            dtype=tf.float32), name='theta')
@@ -43,6 +43,8 @@ class LISTAConvDict (ApproxSC):
             self._We = (1/L)*tf.Variable(np.expand_dims(filter_arr.T, axis=1),
                                          name='We', dtype=tf.float32)
         else:
+            self.kernal_size = init_params_dict['Wd'].shape[1]
+            self.amount_of_kernals = init_params_dict['Wd'].shape[1]
             self._theta = [tf.Variable(init_params_dict['theta'], name='theta')
                            for _ in range(unroll_count)]
             self._Wd = tf.Variable(init_params_dict['Wd'],
