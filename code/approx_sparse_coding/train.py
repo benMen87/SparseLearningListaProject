@@ -135,7 +135,7 @@ def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=20
 
     if sparse_coder == 'lcod':
         sparse_coder = cod.CoD(Wd=Wd, max_iter=iter_count)
-    elif sparse_coder == 'lista' or sparse_coder == 'lista_cov' or  sparse_coder == 'lista_convdict' or sparse_coder == 'lista_convdic_dct':
+    elif sparse_coder == 'lista' or sparse_coder == 'lista_cov' or  sparse_coder == 'lista_convdict' or sparse_coder == 'lista_convdict_dct':
         sparse_coder = ista.ISTA(Wd=Wd, max_iter=iter_count, verbose=False)
     else:
         raise NameError('sparse_coder should be ether "ista" or "cod"')
@@ -178,9 +178,9 @@ if __name__ == '__main__':
     Learning Fast Approximations of Sparse Coding - \
     http://yann.lecun.com/exdb/publis/pdf/gregor-icml-10.pdf')
 
-    parser.add_argument('-m', '--model', default='lista_convdic_dct', type=str,
+    parser.add_argument('-m', '--model', default='lista_convdict_dct', type=str,
                         choices=['lcod', 'lista', 'lista_conv',
-                                 'lista_convdict', 'lista_convdic_dct'],
+                                 'lista_convdict', 'lista_convdict_dct'],
                         help='input mode')
 
     parser.add_argument('-b', '--batch_size', default=1,
@@ -217,7 +217,7 @@ if __name__ == '__main__':
     parser.add_argument('-ks', '--kernal_size', default=3, type=int,
                         help='kernal size to be used in lista_conv')
 
-    parser.add_argument('-kc', '--kernal_count', default=16, type=int,
+    parser.add_argument('-kc', '--kernal_count', default=6, type=int,
                         help='amount of kernal to use in lista_conv')
 
     parser.add_argument('-dp', '--dictionary_path',
@@ -235,7 +235,7 @@ if __name__ == '__main__':
                               model wont be saved')
     # /../../dct_data/saved_model/
     parser.add_argument('-lm', '--load_model_path',
-                        default='/../../dct_data/saved_model/', type=str,
+                        default='', type=str,
                         help='output directory to save model if non is given\
                               model wont be saved')
 
@@ -276,8 +276,8 @@ if __name__ == '__main__':
                                                  filter_arr=filter_arr, L=L,
                                                  batch_size=args.batch_size,
                                                  kernal_size=args.kernal_size)
-        elif args.model == 'lista_convdic_dct':
-            tst = 'lista_convdic_dct'
+        elif args.model == 'lista_convdict_dct':
+            tst = 'lista_convdict_dct'
 
             L = max(abs(np.linalg.eigvals(np.matmul(We, We.T))))
             init_dict = {}
@@ -344,7 +344,7 @@ if __name__ == '__main__':
     elif args.model == 'lista_convdict':
         lb1 = 'LISTAConvDict'
         lb2 = 'ISTA'
-    elif args.model == 'lista_convdic_dct':
+    elif args.model == 'lista_convdict_dct':
         lb1 = 'LISTAConvDictDct'
         lb2 = 'ISTA'
     else:
