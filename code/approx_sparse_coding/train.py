@@ -6,6 +6,8 @@ import lista_conv
 import lista_convdict
 import tensorflow as tf
 import shutil
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 from sparse_coding import cod, ista
@@ -133,7 +135,7 @@ def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=20
 
     if sparse_coder == 'lcod':
         sparse_coder = cod.CoD(Wd=Wd, max_iter=iter_count)
-    elif sparse_coder == 'lista' or sparse_coder == 'lista_cov' or  sparse_coder == 'lista_convdict':
+    elif sparse_coder == 'lista' or sparse_coder == 'lista_cov' or  sparse_coder == 'lista_convdict' or sparse_coder == 'lista_convdic_dct':
         sparse_coder = ista.ISTA(Wd=Wd, max_iter=iter_count, verbose=False)
     else:
         raise NameError('sparse_coder should be ether "ista" or "cod"')
@@ -227,13 +229,13 @@ if __name__ == '__main__':
                         used with tensor board')
 
     parser.add_argument('-o', '--output_dir_path',
-                        default='/../../dct_data/saved_model/',
+                        default='',
                         type=str,
                         help='output directory to save model if non is given\
                               model wont be saved')
     # /../../dct_data/saved_model/
     parser.add_argument('-lm', '--load_model_path',
-                        default='', type=str,
+                        default='/../../dct_data/saved_model/', type=str,
                         help='output directory to save model if non is given\
                               model wont be saved')
 
@@ -277,21 +279,21 @@ if __name__ == '__main__':
         elif args.model == 'lista_convdic_dct':
             tst = 'lista_convdic_dct'
 
+            L = max(abs(np.linalg.eigvals(np.matmul(We, We.T))))
             init_dict = {}
             filter_arr = []
             if len(args.load_model_path) != 0:
-                mWd = np.load(DIR_PATH + args.load_model_path + 'Wd.npy')
-                We = np.load(DIR_PATH + args.load_model_path + 'We.npy')
+                filter_Wd = np.load(DIR_PATH + args.load_model_path + 'Wd.npy')
+                filter_We = np.load(DIR_PATH + args.load_model_path + 'We.npy')
                 theta = np.load(DIR_PATH + args.load_model_path + 'theta.npy')
-                init_dict['Wd'] = Wd
-                init_dict['We'] = We
+                init_dict['Wd'] = filter_Wd
+                init_dict['We'] = filter_We 
                 init_dict['theta'] = theta
             else:
                 filter_arr = [np.random.randn(args.kernal_size) for _ in range(args.kernal_count)]
                 filter_arr = np.array([f/np.linalg.norm(f) for f in filter_arr])
-                # TODO: Calculate We shape based on filters We_shape = 
                 We_shape = (len(filter_arr)*We_shape[1], We_shape[1])
-            L = max(abs(np.linalg.eigvals(np.matmul(We, We.T))))
+            
             model = lista_convdict.LISTAConvDict(We_shape=We_shape,
                                                  unroll_count=unroll_count,
                                                  filter_arr=filter_arr, L=L,
@@ -321,11 +323,11 @@ if __name__ == '__main__':
 
             if len(args.output_dir_path):
                 outpth = DIR_PATH + args.output_dir_path
-                if args.model == 'lista_convdic_dct':
-                    Wd = model.Wd
+                if args.model == 'lista_convdict_dct':
+                    Wd = model.Wd.eval()
                     np.save(outpth + 'Wd', Wd)
-                We = model.We
-                theta = model._theta
+                We = model.We.eval()
+                theta = model._theta[-1].eval()
                 np.save(outpth + 'We', We)
                 np.save(outpth + 'theta', theta)
 
