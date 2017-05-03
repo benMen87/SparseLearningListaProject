@@ -3,7 +3,7 @@
 *.jpg
 *.sln
 *.pyproj
-*.pyc
+**.pyc
 *.png
 *.npz
 code/approx_sparse_coding/mnist_data/test.npz

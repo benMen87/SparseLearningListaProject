@@ -10,8 +10,8 @@ if __name__ == '__main__':
 
     TRIANING_PATCHS_PATH = dir_path  + '/../../patches_for_traindict/train.npy'
     TEST_PATCHS_PATH = dir_path  + '/../../patches_for_traindict/test.npy'
-    DICTIONARY_PATH =  dir_path  + '/../../dct_data/Wd.npy'
-    OUTPUT_PATH = dir_path  + '/../../dct_data/'
+    DICTIONARY_PATH =  dir_path  + '/../../convdict2d_data/Wd.npy'
+    OUTPUT_PATH = dir_path  + '/../../convdict2d_data/'
 
     db_tools.build_approx_sc_learnig_data(TRIANING_PATCHS_PATH, TEST_PATCHS_PATH,
                                           DICTIONARY_PATH, DICTIONARY_PATH, OUTPUT_PATH)
