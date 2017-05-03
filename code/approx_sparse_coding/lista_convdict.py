@@ -54,7 +54,7 @@ class LISTAConvDict (ApproxSC):
 
     def build_model(self):
         shrinkge_fn = self._shrinkge()
-
+        
         B = tf.nn.conv1d(tf.expand_dims(self._X, axis=-1),
                          self._We, stride=1,
                          padding='SAME', name='bias')
