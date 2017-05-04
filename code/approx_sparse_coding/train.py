@@ -4,6 +4,7 @@ import lcod
 import lista
 import lista_conv
 import lista_convdict
+import lista_convdict2d
 import tensorflow as tf
 import shutil
 import matplotlib
@@ -22,16 +23,6 @@ def tf_sparse_count(tf_vec):
     count = tf.reduce_sum(as_ints)
     return count
 
-
-def zero_none_grad(grad, var):
-    return grad if grad is not None else tf.zeros_like(var)
-
-
-def cape_g_byname(grad, var, name, min=-1, max=1):
-    grad = zero_none_grad(grad, var)
-    if var.name == model.theta.name:
-        grad = tf.clip_by_value(zero_none_grad(grad, var), min, max)
-    return grad
 
 
 def train(sess, model, train_gen, num_optimization_steps, valid_gen=None,
@@ -62,14 +53,6 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None,
     if not os.path.exists(plotdir + '/approx_sparse'):
         os.makedirs(plotdir + '/approx_sparse')
     approxplotdir = plotdir + '/approx_sparse'
-    #
-    # optimize graph with gradient decent with LR of 1/t
-    global_step = tf.Variable(0, trainable=False)
-    learning_rate = 0.001
-    k = 0.5
-    decay_rate = 1
-    learning_rate = tf.train.inverse_time_decay(learning_rate, global_step,
-                                                k, decay_rate)
 
     optimizer = tf.train.AdamOptimizer(0.001).minimize(model.loss)
 
@@ -128,35 +111,44 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None,
     plt.savefig(approxplotdir + '/Sparsity_{}'.format(model.unroll_count), bbox_inches='tight')
 
 
-def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=20):
+def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=10, batch_size=500):
 
     approx_sc_err = 0
     sc_err = 0
 
     if sparse_coder == 'lcod':
         sparse_coder = cod.CoD(Wd=Wd, max_iter=iter_count)
-    elif sparse_coder == 'lista' or sparse_coder == 'lista_cov' or  sparse_coder == 'lista_convdict' or sparse_coder == 'lista_convdict_dct':
+    elif sparse_coder == 'lista' or sparse_coder == 'lista_cov' or sparse_coder == 'lista_convdict' or sparse_coder == 'lista_convdict_dct' or sparse_coder == 'lista_convdict2d':
         sparse_coder = ista.ISTA(Wd=Wd, max_iter=iter_count, verbose=False)
     else:
         raise NameError('sparse_coder should be ether "ista" or "cod"')
-    input_shape = (1, model.input.get_shape().as_list()[-1])
-    output_shape = (1, model.output[0].get_shape().as_list()[-1])
-    for i in range(test_size):
-        X_test, Z_test = next(test_gen)
+    input_shape = (batch_size, model.input.get_shape().as_list()[-1])
+    output_shape = (batch_size, model.output[0].get_shape().as_list()[-1])
 
-        X_test = np.reshape(np.array(X_test), input_shape)
-        Z_test = np.reshape(np.array(Z_test), output_shape)
+    for i in range(test_size):
+
+        b_Xtest = []
+        b_Ztest = []
+        print('test batch number %d'%i)
+        for _ in range(batch_size):
+            X_test, Z_test = next(test_gen)
+            b_Xtest.append(X_test)
+            b_Ztest.append(Z_test)
+
+        b_Xtest = np.reshape(np.array(b_Xtest), input_shape)
+        b_Ztest = np.reshape(np.array(b_Ztest), output_shape)
+
         # #
         # run approx SC
-        Z_approx= sess.run(model.output,
-                           {model.input: X_test, model.target: Z_test})
-
+        Z_approx = sess.run(model.output,
+                            {model.input: b_Xtest, model.target: b_Ztest})
         # Z_approx = Z_approx.T
-        approx_sc_err += np.sum((Z_approx - Z_test) ** 2)
+        approx_sc_err += np.sum((Z_approx - b_Ztest) ** 2)
         #
         # run ista/cod with specified iterations
-        Z_sc, _ = sparse_coder.fit(X_test.T)
-        sc_err += np.sum((Z_sc.T - Z_test) ** 2)
+        for X_test, Z_test in zip(b_Xtest, b_Ztest):
+            Z_sc, _ = sparse_coder.fit(X_test.T)
+            sc_err += np.sum((Z_sc.T - Z_test) ** 2)
 
     approx_sc_err /= test_size
     sc_err /= test_size
@@ -180,10 +172,11 @@ if __name__ == '__main__':
 
     parser.add_argument('-m', '--model', default='lista_convdict_dct', type=str,
                         choices=['lcod', 'lista', 'lista_conv',
-                                 'lista_convdict', 'lista_convdict_dct'],
+                                 'lista_convdict', 'lista_convdict_dct',
+                                 'lista_convdict2d'],
                         help='input mode')
 
-    parser.add_argument('-b', '--batch_size', default=1,
+    parser.add_argument('-b', '--batch_size', default=5,
                         type=float, help='size of train batches')
 
     parser.add_argument('-tr', '--train_path',
@@ -207,7 +200,7 @@ if __name__ == '__main__':
                         type=int, nargs='+',
                         help='Amount of times to run lcod/list block')
 
-    parser.add_argument('-n', '--num_steps', default=1, type=int,
+    parser.add_argument('-n', '--num_steps', default=0, type=int,
                         help='number of training steps')
 
     parser.add_argument('-vs', '--num_validsteps', default=500, type=int,
@@ -235,7 +228,7 @@ if __name__ == '__main__':
                               model wont be saved')
     # /../../dct_data/saved_model/
     parser.add_argument('-lm', '--load_model_path',
-                        default='', type=str,
+                        default='/../../dct_data/saved_model/', type=str,
                         help='output directory to save model if non is given\
                               model wont be saved')
 
@@ -287,19 +280,36 @@ if __name__ == '__main__':
                 filter_We = np.load(DIR_PATH + args.load_model_path + 'We.npy')
                 theta = np.load(DIR_PATH + args.load_model_path + 'theta.npy')
                 init_dict['Wd'] = filter_Wd
-                init_dict['We'] = filter_We 
+                init_dict['We'] = filter_We
                 init_dict['theta'] = theta
             else:
                 filter_arr = [np.random.randn(args.kernal_size) for _ in range(args.kernal_count)]
                 filter_arr = np.array([f/np.linalg.norm(f) for f in filter_arr])
                 We_shape = (len(filter_arr)*We_shape[1], We_shape[1])
-            
+
             model = lista_convdict.LISTAConvDict(We_shape=We_shape,
                                                  unroll_count=unroll_count,
                                                  filter_arr=filter_arr, L=L,
                                                  batch_size=args.batch_size,
                                                  kernal_size=args.kernal_size,
                                                  init_params_dict=init_dict)
+
+        elif args.model == 'lista_convdict2d':
+            tst = 'lista_convdict2d'
+            init_dict = {}
+            filter_arr = np.load(DIR_PATH + '/../../covdict_data/filter_arr.npy')
+            L = max(abs(np.linalg.eigvals(np.matmul(We, We.T))))
+            filter_arr = [np.random.randn(args.kernal_size, args.kernal_size)
+                          for _ in range(args.kernal_count)]
+            filter_arr = np.array([f/np.linalg.norm(f) for f in filter_arr])
+            We_shape = (len(filter_arr)*We_shape[1], We_shape[1])
+
+            model = lista_convdict2d.LISTAConvDict2d(We_shape=We_shape,
+                                                     unroll_count=unroll_count,
+                                                     filter_arr=filter_arr, L=L,
+                                                     batch_size=args.batch_size,
+                                                     kernal_size=args.kernal_size,
+                                                     init_params_dict=init_dict)
         else:
             tst = 'lista_cov'
             model = lista_conv.LISTAConv(We_shape=We_shape,
@@ -319,18 +329,19 @@ if __name__ == '__main__':
             test_gen = db_tools.testset_gen(DIR_PATH + args.test_path)
             aperr, scerr = test(sess=sess, model=model,
                                 iter_count=unroll_count,
-                                test_gen=test_gen, Wd=Wd, sparse_coder=tst)
+                                test_gen=test_gen, Wd=Wd, sparse_coder=tst,
+                                batch_size=args.batch_size)
 
             if len(args.output_dir_path):
                 outpth = DIR_PATH + args.output_dir_path
-                if args.model == 'lista_convdict_dct':
-                    Wd = model.Wd.eval()
-                    np.save(outpth + 'Wd', Wd)
                 We = model.We.eval()
-                theta = model._theta[-1].eval()
+                theta = sess.run(model._theta)
                 np.save(outpth + 'We', We)
                 np.save(outpth + 'theta', theta)
 
+                if args.model == 'lista_convdict_dct':
+                    Wd = model.Wd.eval()
+                    np.save(outpth + 'Wd', Wd)
         tf.reset_default_graph()
         approx_error.append(aperr)
         sc_error.append(scerr)
