@@ -34,7 +34,7 @@ class LISTAConvDict (ApproxSC):
             self.kernal_size = filter_arr.shape[1]
             self.amount_of_kernals = filter_arr.shape[0]
             self._theta = [tf.Variable(tf.constant(0.5/L,
-                                       shape=[1, self.output_size],
+                                       shape=[1, self.input_size, self.amount_of_kernals],
                            dtype=tf.float32), name='theta')
                            for _ in range(unroll_count)]
             transpose_filt = np.array([f[::-1] for f in filter_arr])
@@ -43,10 +43,11 @@ class LISTAConvDict (ApproxSC):
             self._We = (1/L)*tf.Variable(np.expand_dims(filter_arr.T, axis=1),
                                          name='We', dtype=tf.float32)
         else:
-            self.kernal_size = init_params_dict['Wd'].shape[1]
+            self.kernal_size = init_params_dict['Wd'].shape[0]
             self.amount_of_kernals = init_params_dict['Wd'].shape[1]
-            self._theta = [tf.Variable(init_params_dict['theta'], name='theta')
-                           for _ in range(unroll_count)]
+            self._theta = [tf.Variable(init_params_dict['theta'][0], name='theta')]
+            self._theta += [tf.Variable(init_params_dict['theta'][-1], name='theta')
+                            for _ in range(1, unroll_count)]
             self._Wd = tf.Variable(init_params_dict['Wd'],
                                    name='Wd', dtype=tf.float32)
             self._We = tf.Variable(init_params_dict['We'],
@@ -54,12 +55,11 @@ class LISTAConvDict (ApproxSC):
 
     def build_model(self):
         shrinkge_fn = self._shrinkge()
-        
+
         B = tf.nn.conv1d(tf.expand_dims(self._X, axis=-1),
                          self._We, stride=1,
                          padding='SAME', name='bias')
-        theta_2d = tf.reshape(self._theta[0], [1, self.input_size, self.amount_of_kernals])
-        self._Z.append(shrinkge_fn(B, theta_2d))
+        self._Z.append(shrinkge_fn(B, self._theta[0]))
         #
         # run unrolling
         for t in range(1, self._unroll_count):
@@ -71,8 +71,7 @@ class LISTAConvDict (ApproxSC):
             res = self._Z[t-1] - conv_we
             res_add_bias = res + B
 
-            theta_2d = tf.reshape(self._theta[t], [1, self.input_size, self.amount_of_kernals])
-            self._Z.append(shrinkge_fn(res_add_bias, theta_2d))
+            self._Z.append(shrinkge_fn(res_add_bias, self._theta[t]))
 
     @property
     def loss(self):
