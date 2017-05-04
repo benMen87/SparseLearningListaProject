@@ -111,7 +111,7 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None,
     plt.savefig(approxplotdir + '/Sparsity_{}'.format(model.unroll_count), bbox_inches='tight')
 
 
-def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=10, batch_size=500):
+def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=100, batch_size=500):
 
     approx_sc_err = 0
     sc_err = 0
@@ -150,8 +150,8 @@ def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=10
             Z_sc, _ = sparse_coder.fit(X_test.T)
             sc_err += np.sum((Z_sc.T - Z_test) ** 2)
 
-    approx_sc_err /= test_size
-    sc_err /= test_size
+    approx_sc_err /= (test_size*batch_size)
+    sc_err /= (test_size*batch_size)
 
     return approx_sc_err, sc_err
 
