@@ -44,9 +44,10 @@ class LISTAConvDict2d (ApproxSC):
                                          name='We', dtype=tf.float32)
         else:
             self.kernal_size = init_params_dict['Wd'].shape[1]
-            self.amount_of_kernals = init_params_dict['Wd'].shape[1]
-            self._theta = [tf.Variable(init_params_dict['theta'], name='theta')
-                           for _ in range(unroll_count)]
+            self.amount_of_kernals = init_params_dict['Wd'].shape[2]
+            self._theta = [tf.Variable(init_params_dict['theta'][0], name='theta')]
+            self._theta += [tf.Variable(init_params_dict['theta'][-1], name='theta')
+                            for _ in range(1, unroll_count)]
             self._Wd = tf.Variable(init_params_dict['Wd'],
                                    name='Wd', dtype=tf.float32)
             self._We = tf.Variable(init_params_dict['We'],
@@ -62,18 +63,18 @@ class LISTAConvDict2d (ApproxSC):
         #
         # run unrolling
         for t in range(1, self._unroll_count):
-            conv_wd = tf.nn.conv2d(self._Z[t-1], self._Wd,
+            conv_wd = tf.nn.conv2d(self._Z[0], self._Wd,
                                    strides=[1, 1, 1, 1],
                                    padding='SAME', name='convWd')
 
             conv_we = tf.nn.conv2d(conv_wd, self._We,
                                    strides=[1, 1, 1, 1],
                                    padding='SAME', name='convWe')
-            res = self._Z[t-1] - conv_we
+            res = self._Z[0] - conv_we
             res_add_bias = res + B
 
             # theta_2d = tf.reshape(self._theta[t], [1, self.input_size, self.amount_of_kernals])
-            self._Z.append(shrinkge_fn(res_add_bias, self._theta[t]))
+            self._Z[0] = shrinkge_fn(res_add_bias, self._theta[t])
 
     @property
     def loss(self):

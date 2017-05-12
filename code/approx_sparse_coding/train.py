@@ -14,7 +14,7 @@ import numpy as np
 from sparse_coding import cod, ista
 # from dict_learning.traindict import display_atoms
 
-DIR_PATH = os.path.dirname(os.path.realpath(__file__))
+DIR_PATH = os.path.dirname(os.path.realpath(__file__))+'/'
 
 
 def tf_sparse_count(tf_vec):
@@ -111,7 +111,7 @@ def train(sess, model, train_gen, num_optimization_steps, valid_gen=None,
     plt.savefig(approxplotdir + '/Sparsity_{}'.format(model.unroll_count), bbox_inches='tight')
 
 
-def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=100, batch_size=500):
+def test(sess, model, test_gen, iter_count, Wd, sparse_coder='cod', test_size=1, batch_size=1):
 
     approx_sc_err = 0
     sc_err = 0
@@ -170,14 +170,14 @@ if __name__ == '__main__':
     Learning Fast Approximations of Sparse Coding - \
     http://yann.lecun.com/exdb/publis/pdf/gregor-icml-10.pdf')
 
-    parser.add_argument('-m', '--model', default='lista_convdict_dct', type=str,
+    parser.add_argument('-m', '--model', default='lista_convdict2d', type=str,
                         choices=['lcod', 'lista', 'lista_conv',
                                  'lista_convdict', 'lista_convdict_dct',
                                  'lista_convdict2d'],
                         help='input mode')
 
-    parser.add_argument('-b', '--batch_size', default=5,
-                        type=float, help='size of train batches')
+    parser.add_argument('-b', '--batch_size', default=1,
+                        type=int, help='size of train batches')
 
     parser.add_argument('-tr', '--train_path',
                         default='/../../dct_data/trainset.npz', type=str,
@@ -228,7 +228,7 @@ if __name__ == '__main__':
                               model wont be saved')
     # /../../dct_data/saved_model/
     parser.add_argument('-lm', '--load_model_path',
-                        default='/../../dct_data/saved_model/', type=str,
+                        default='../../convdict2d_data/saved_model/', type=str,
                         help='output directory to save model if non is given\
                               model wont be saved')
 
@@ -297,12 +297,21 @@ if __name__ == '__main__':
         elif args.model == 'lista_convdict2d':
             tst = 'lista_convdict2d'
             init_dict = {}
-            filter_arr = np.load(DIR_PATH + '/../../covdict_data/filter_arr.npy')
+
             L = max(abs(np.linalg.eigvals(np.matmul(We, We.T))))
-            filter_arr = [np.random.randn(args.kernal_size, args.kernal_size)
-                          for _ in range(args.kernal_count)]
-            filter_arr = np.array([f/np.linalg.norm(f) for f in filter_arr])
-            We_shape = (len(filter_arr)*We_shape[1], We_shape[1])
+            if len(args.load_model_path) != 0:
+                filter_Wd = np.load(DIR_PATH + args.load_model_path + 'Wd.npy')
+                filter_We = np.load(DIR_PATH + args.load_model_path + 'We.npy')
+                theta = np.load(DIR_PATH + args.load_model_path + 'theta.npy')
+                init_dict['Wd'] = filter_Wd
+                init_dict['We'] = filter_We
+                init_dict['theta'] = theta
+                filter_arr = []
+            else:
+                filter_arr = [np.random.randn(args.kernal_size, args.kernal_size)
+                              for _ in range(args.kernal_count)]
+                filter_arr = np.array([f/np.linalg.norm(f) for f in filter_arr])
+                We_shape = (len(filter_arr)*We_shape[1], We_shape[1])
 
             model = lista_convdict2d.LISTAConvDict2d(We_shape=We_shape,
                                                      unroll_count=unroll_count,
@@ -330,18 +339,17 @@ if __name__ == '__main__':
             aperr, scerr = test(sess=sess, model=model,
                                 iter_count=unroll_count,
                                 test_gen=test_gen, Wd=Wd, sparse_coder=tst,
-                                batch_size=args.batch_size)
+                                batch_size=500)
 
             if len(args.output_dir_path):
-                outpth = DIR_PATH + args.output_dir_path
+                output = DIR_PATH + args.output_dir_path
                 We = model.We.eval()
                 theta = sess.run(model._theta)
-                np.save(outpth + 'We', We)
-                np.save(outpth + 'theta', theta)
-
-                if args.model == 'lista_convdict_dct':
+                np.save(output + 'We', We)
+                np.save(output + 'theta', theta)
+                if args.model.find('conv') != -1:
                     Wd = model.Wd.eval()
-                    np.save(outpth + 'Wd', Wd)
+                    np.save(output + 'Wd', Wd)
         tf.reset_default_graph()
         approx_error.append(aperr)
         sc_error.append(scerr)
