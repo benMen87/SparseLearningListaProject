@@ -12,26 +12,26 @@ class LISTAConvDict2d (ApproxSC):
        -> We = (circ(f_0)|circ(f_1)|...|circ(f_n))^T or n fiters with depth of 1
     """
 
-    def __init__(self, We_shape, unroll_count, filter_arr,
-                 L, batch_size=1, kernal_size=3,
-                 shared_threshold=False, shrinkge_type='soft thresh',
-                 init_params_dict={}):
-        """ Create a LCoD model.
+    def __init__(self, We_shape, unroll_count,
+                 L, filter_arr=None, batch_size=1, kernel_size=3,
+                 kernel_count=32, shared_threshold=False,
+                 shrinkge_type='soft thresh', init_params_dict={}):
+        """ Create a Conv2DLCoD model.
 
         Args:
-            We_shape: Input X is encoded using matmul(We, X).
+            We_shape: Input X is encoded using conv2D(We, X).
             unroll_size: Amount of times to repeat lcod block.
         """
 
         super(LISTAConvDict2d, self).__init__(We_shape, unroll_count,
-                                            shrinkge_type, shared_threshold, batch_size)
+                                              shrinkge_type, shared_threshold, batch_size)
 
         self.input_channels = 1  # TODO: add support for RGB?
         self.patch_dim = np.int(np.sqrt(self.input_size))
         #
         # model variables
-        if not init_params_dict:
-            self.kernal_size = filter_arr.shape[1]
+        if not init_params_dict and filter_arr is not None:
+            self.kernel_size = filter_arr.shape[1]
             self.amount_of_kernals = filter_arr.shape[0]
             self._theta = [tf.Variable(tf.constant(0.5/L,
                                        shape=[1, self.patch_dim, self.patch_dim, self.amount_of_kernals],
@@ -42,8 +42,8 @@ class LISTAConvDict2d (ApproxSC):
                                    name='Wd', dtype=tf.float32)
             self._We = (1/L)*tf.Variable(np.expand_dims(filter_arr.T, axis=-2),
                                          name='We', dtype=tf.float32)
-        else:
-            self.kernal_size = init_params_dict['Wd'].shape[1]
+        elif init_params_dict:
+            self.kernel_size = init_params_dict['Wd'].shape[1]
             self.amount_of_kernals = init_params_dict['Wd'].shape[2]
             self._theta = [tf.Variable(init_params_dict['theta'][0], name='theta')]
             self._theta += [tf.Variable(init_params_dict['theta'][-1], name='theta')
@@ -52,6 +52,17 @@ class LISTAConvDict2d (ApproxSC):
                                    name='Wd', dtype=tf.float32)
             self._We = tf.Variable(init_params_dict['We'],
                                    name='We', dtype=tf.float32)
+        else:
+            self.amount_of_kernals = kernel_count
+            self.kernel_size = kernel_size
+            self._theta = [tf.Variable(tf.constant(0.5/L,
+                           shape=[1, self.patch_dim, self.patch_dim, self.amount_of_kernals],
+                           dtype=tf.float32), name='theta')
+                           ]
+            init_kers = tf.random_normal([self.kernel_size, self.kernel_size,
+                                          self.input_channels, self.amount_of_kernals])
+            self._We = tf.Variable(init_kers)
+            self._Wd = tf.Variable(tf.transpose(init_kers, [0, 1, 3, 2]))
 
     def build_model(self):
         shrinkge_fn = self._shrinkge()
@@ -88,6 +99,9 @@ class LISTAConvDict2d (ApproxSC):
                 self._loss /= 2
         return self._loss
 
+    def output_shape(self):
+        return self._Z[-1].get_shape()
+
     @property
     def Wd(self):
         return self._Wd
@@ -96,6 +110,10 @@ class LISTAConvDict2d (ApproxSC):
     def output(self):
         return tf.reshape(tf.transpose(self._Z[-1], [0, 3, 1, 2]),
                           [-1, self.input_size * self.amount_of_kernals])
+
+    @property
+    def output2D(self):
+        return self._Z[-1]
 
     @property
     def batch_size(self):

@@ -9,7 +9,7 @@ from collections import namedtuple
 dir_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(dir_path + '/..')
 from sparse_coding.cod import CoD
-
+from sparse_coding.ista import ISTA
 
 def next_image_gen(db_fullpath, dset_typ='train', rgb2gray=True):
 
@@ -126,7 +126,7 @@ def load_dataset_and_dict(datapath, dictpath):
 
 def compute_patch_sc_pydict(patch_set, Wd):
     sparse_rep = []
-    sparse_code = CoD(Wd, alpha=0.5)
+    sparse_code = ISTA(Wd, alpha=0.5)
     i = 0
     for patch in patch_set:
         i += 1

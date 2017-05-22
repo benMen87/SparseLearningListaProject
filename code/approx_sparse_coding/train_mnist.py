@@ -2,22 +2,25 @@
 # ------------------------ IMPORT DEPEDINCYS -------------------------
 
 # %%
-import lmnist
+
 import tensorflow as tf
 import shutil
-import matplotlib.pyplot as plt
-import numpy as np
-from sparse_coding import cod, ista
-from sklearn.decomposition import MiniBatchDictionaryLearning
-from sklearn import linear_model
-from train import zero_none_grad
-from train import test as sparse_code_test
-from sklearn.manifold import TSNE
-from matplotlib import pylab
-import argparse
-from mnist import MNIST
 import os
 import sys
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib import pylab
+import argparse
+
+import lmnist
+from sklearn.decomposition import MiniBatchDictionaryLearning
+from sklearn import linear_model
+from train import test as sparse_code_test
+from sklearn.manifold import TSNE
+from mnist import MNIST
+from lcod import LCoD
+from lista import LISTA
+from lista_convdict2d import LISTAConvDict2d
 
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(DIR_PATH + '/..')
@@ -49,12 +52,13 @@ except:
 # %%
 
 
-def load_maybe_build_dictionary(dict_path):
+def load_maybe_build_dictionary(dict_path, atom=784):
     if not os.path.exists(dict_path):
+        print('Learning new dict this may take a while')
         input, _ = mndata.load_training()
         input -= np.mean(input, axis=1, keepdims=True)
         input /= np.linalg.norm(input, axis=1, keepdims=True)
-        dico = MiniBatchDictionaryLearning(n_components=784, alpha=0.1,
+        dico = MiniBatchDictionaryLearning(n_components=atom, alpha=0.1,
                                            n_iter=1000)
         Wd = dico.fit(input[:6000]).components_.T
         np.save(dict_path, Wd)
@@ -62,7 +66,7 @@ def load_maybe_build_dictionary(dict_path):
         Wd = np.load(dict_path)
     return Wd
 
-Wd = load_maybe_build_dictionary(DIR_PATH + '/mnist_data/Wd.npy')
+Wd = load_maybe_build_dictionary(DIR_PATH + '/mnist_data/conv2d/Wd.npy', atom=784*6)
 
 # ----------------------------- GET TRAIN/TEST DATA ---------------------------
 
@@ -90,13 +94,13 @@ def load_maybe_build_sc(input, sc_path):
     return sc_arr
 
 train_im, train_label = mndata.load_training()
-train_sparse = load_maybe_build_sc(train_im, MNIST_SET_PATH + 'train_sc.npz')
+train_sparse = load_maybe_build_sc(train_im, MNIST_SET_PATH + '/conv2d/' +  'train_sc.npz')
 
 train_im -= np.mean(train_im, axis=1, keepdims=True)
 train_im /= np.linalg.norm(train_im, axis=1, keepdims=True)
 
 test_im, test_label = mndata.load_testing()
-test_sparse = load_maybe_build_sc(test_im, MNIST_SET_PATH + 'test_sc.npz')
+test_sparse = load_maybe_build_sc(test_im, MNIST_SET_PATH + '/conv2d/' + 'test_sc.npz')
 
 test_im -= np.mean(test_im, axis=1, keepdims=True)
 test_im /= np.linalg.norm(test_im, axis=1, keepdims=True)
@@ -214,8 +218,31 @@ if args.warm_restart:
 else:
     We = None
 
+if args.model == 'lcod':
+    sc_block = LCoD(We_shape, unroll_count, We,
+                    shrinkge_type='soft thresh',
+                    batch_size=batch_size)
+elif args.model == 'lista':
+    sc_block = LISTA(We_shape, unroll_count, We,
+                     shrinkge_type='soft thresh',
+                     batch_size=batch_size)
+elif args.model == 'lista_convdict2d':
+    kernel_count = We.shape[0] // We.shape[1]
+    kernael_size = 3
+
+    filter_arr = [np.random.randn(kernel_size, kernel_size)
+                  for _ in range(kernel_count)]
+    filter_arr = np.array([f/np.linalg.norm(f) for f in filter_arr])
+    We_shape = (len(filter_arr)*We.shape[1], We.shape[1])
+    sc_block = LISTAConvDict2d(We_shape=We.shape,
+                               unroll_count=unroll_count,
+                               filter_arr=filter_arr, L=L,
+                               batch_size=batch_size,
+                               kernal_size=kernel_size,
+                               init_params_dict=dict())
+
 model = lmnist.Lmnist(We_shape=We.shape, unroll_count=args.unroll_count,
-                      We=We, sc_type=args.model,
+                      sc_block=sc_block, We=We, sc_type=args.model,
                       batch_size=batch_size)
 model.build_model()
 #
@@ -226,25 +253,9 @@ k = 0.5
 decay_rate = 1
 learning_rate = tf.train.inverse_time_decay(learning_rate, global_step, k, decay_rate)
 
-# learning_rate = tf.train.inverse_time_decay(learning_rate, global_step,
-#                                             k, decay_rate)
-
-#
-# Clip gradients to avoid overflow due to recurrent nature of algorithm
 eta = args.eta
-# optimizer = tf.train.GradientDescentOptimizer(learning_rate)
-
-# gvs_sc = optimizer.compute_gradients(model.sparse_loss)
-# capped_sc_gvs = [(tf.clip_by_value(zero_none_grad(grad, var), -1, 1), var) for grad, var in gvs_sc]
-# gvs_clss = optimizer.compute_gradients(model.classify_loss)
-# total_loss = eta*gvs_clss + (1-eta)*model.classify_loss
-
 total_loss = eta*model.sparse_loss + (1-eta)*model.classify_loss
 optimizer = tf.train.AdamOptimizer(learning_rate).minimize(total_loss)
-
-# total_loss = eta*tf.reduce_sum(tf.abs(model.Z)) + (1-eta)*model.classify_loss
-# optimizer = tf.train.AdagradOptimizer(learning_rate).minimize(total_loss)
-# optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(total_loss)
 
 # --------------------------------- TRAINING ---------------------------------
 
