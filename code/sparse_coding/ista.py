@@ -9,10 +9,11 @@ class ISTA(object):
     """
     def __init__(self, Wd, max_iter=1000, thresh=1e-4, alpha=0.5, verbose=True):
         self.max_iter = max_iter
-        self.thresh   = thresh
-        self.alpha    = alpha
-        self.Wd       = Wd
-        self.loss     = lambda Wd, X,Z: 0.5*np.linalg.norm(X - np.matmul(Wd, Z))**2 + self.alpha*np.linalg.norm(Z, 1) 
+        self.thresh = thresh
+        self.alpha = alpha
+        self.Wd = Wd
+        self.L = max(abs(np.linalg.eigvals(np.matmul(Wd.T, Wd))))
+        self.loss = lambda Wd, X, Z: 0.5*np.linalg.norm(X - np.matmul(Wd, Z))**2 + self.alpha*np.linalg.norm(Z, 1) 
 
         if verbose:
             logging.basicConfig(level=logging.DEBUG)
@@ -24,22 +25,23 @@ class ISTA(object):
         x  = x - np.sign(x)*threshold
         return x
 
-    def fit(self, X, Wd=None, max_iter=None, thresh=None, alpha=None):
+    def fit(self, X, Wd=None, L=None, max_iter=None, thresh=None, alpha=None):
         """
         Find sparse representation via ista alg.
         """
-        #print('## RUN ISTA')
+
         Wd = self.Wd if Wd is None else Wd
+        L = self.L if L is None else L
         max_iter = self.max_iter if max_iter is None else max_iter
-        thresh   = self.thresh   if thresh is None else thresh
-        alpha   =  self.alpha    if alpha is None else alpha
+        thresh = self.thresh if thresh is None else thresh
+        alpha = self.alpha if alpha is None else alpha
 
         if np.ndim(X) == 1:
             X = X[:, np.newaxis]
-        n, m  = Wd.shape
+        n, m = Wd.shape
 
-        Z    = np.zeros((m, 1))
-        L = max(abs(np.linalg.eigvals(np.matmul(Wd.T, Wd))))
+        mini_batch_size = X.shape[1] 
+        Z = np.zeros((m, mini_batch_size))
         S = np.eye(m) - (1/L)*np.matmul(Wd.T, Wd)
         B = (1/L)*np.matmul(Wd.T, X)
         theta = alpha / L
@@ -50,10 +52,10 @@ class ISTA(object):
 
             C = np.matmul(S, Z) + B
             Zhat = self.soft_threshold(C, theta)
-            res  = Zhat - Z
+            res = Zhat - Z
             Z = Zhat
 
-            if np.linalg.norm(res , 2) < thresh : 
+            if np.linalg.norm(res, 2) / mini_batch_size < thresh : 
                 break
         else:
             logging.debug('sparse rep did not converge broke after max iter')
