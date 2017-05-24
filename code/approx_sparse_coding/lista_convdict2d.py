@@ -12,12 +12,11 @@ class LISTAConvDict2d (ApproxSC):
        -> We = (circ(f_0)|circ(f_1)|...|circ(f_n))^T or n fiters with depth of 1
     """
 
-    def __init__(self, We_shape, unroll_count,
-                 L, filter_arr=None, batch_size=1, kernel_size=3,
-                 kernel_count=32, shared_threshold=False,
-                 shrinkge_type='soft thresh', init_params_dict={}):
-        """ Create a Conv2DLCoD model.
-
+    def __init__(self, We_shape, unroll_count, L, 
+                 filter_arr=None, batch_size=1, kernel_count=1, kernel_size=3,
+                 shared_threshold=False, shrinkge_type='soft thresh',
+                 init_params_dict={}):
+        """ Create a LCoD model.
         Args:
             We_shape: Input X is encoded using conv2D(We, X).
             unroll_size: Amount of times to repeat lcod block.
@@ -30,7 +29,7 @@ class LISTAConvDict2d (ApproxSC):
         self.patch_dim = np.int(np.sqrt(self.input_size))
         #
         # model variables
-        if not init_params_dict and filter_arr is not None:
+        if not init_params_dict and filter_arr is not None :
             self.kernel_size = filter_arr.shape[1]
             self.amount_of_kernals = filter_arr.shape[0]
             self._theta = [tf.Variable(tf.constant(0.5/L,
@@ -58,7 +57,7 @@ class LISTAConvDict2d (ApproxSC):
             self._theta = [tf.Variable(tf.constant(0.5/L,
                            shape=[1, self.patch_dim, self.patch_dim, self.amount_of_kernals],
                            dtype=tf.float32), name='theta')
-                           ]
+                           for _ in range(unroll_count)]
             init_kers = tf.random_normal([self.kernel_size, self.kernel_size,
                                           self.input_channels, self.amount_of_kernals])
             self._We = tf.Variable(init_kers)
@@ -105,6 +104,14 @@ class LISTAConvDict2d (ApproxSC):
     @property
     def Wd(self):
         return self._Wd
+
+    @property
+    def output2D(self):
+        return self._Z[-1]
+    
+    @property
+    def input2D(self):
+        return tf.reshape(self._X, [-1, self.patch_dim, self.patch_dim, 1])
 
     @property
     def output(self):
