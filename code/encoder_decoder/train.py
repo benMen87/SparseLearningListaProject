@@ -1,6 +1,8 @@
 import os
 import sys
-sys.path.append('/home/benmen/Msc3yr/Sparse/SparseLearningListaProject/code/approx_sparse_coding')
+
+DIR_PATH = os.path.dirname(os.path.realpath(__file__))+'/'
+sys.path.append(os.path.abspath(DIR_PATH + '../approx_sparse_coding'))
 
 import argparse
 import numpy as np
@@ -12,8 +14,6 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import lista_convdict2d as sparse_encoder
-
-DIR_PATH = os.path.dirname(os.path.realpath(__file__))+'/'
 
 parser = argparse.ArgumentParser(description='Sparse encoder decoder model')
 
@@ -117,9 +117,9 @@ def nextbatch(X, Y, batch_size, run_once=False):
             batch_X = np.concatenate((X[offset: data_len], X[:batch_size - (data_len - offset)]), axis=0)
             batch_Y = np.concatenate((Y[offset: data_len], Y[:batch_size - (data_len - offset)]), axis=0)
             offset = batch_size - (data_len - offset)
-        yield X, Y
+        yield batch_X, batch_Y
 
-
+print('batch size {}'.format(args.batch_size))
 train_batch = nextbatch(X_train, Y_train, args.batch_size)
 vaild_batch = nextbatch(X_valid, Y_valid, 500)
 test_batch = nextbatch(X_test, Y_test, 500, run_once=True)
@@ -143,15 +143,15 @@ with tf.Session() as sess:
         if iter % 10 == 0:
             _, iter_loss = sess.run([optimizer_de, loss], {encoder.input: X_batch})
         else:
-            _, loss = sess.run([optimizer_en, loss], {encoder.input: X_batch})
+            _, iter_loss = sess.run([optimizer_en, loss], {encoder.input: X_batch})
         train_loss.append(iter_loss)
 
         epoch_loss += iter_loss
-        if iter % X_test.shape[0] == 0:
-            print('epoch %d: loss val:%f'%(iter//X_test.shape[0], epoch_loss / X_test.shape[0]))
+        if iter % X_train.shape[0] == 0:
+            print('epoch %d: loss val:%f'%(iter//X_train.shape[0], epoch_loss / X_train.shape[0]))
             epoch_loss = 0
 
-        if iter % 500:
+        if iter % 500 == 0:
             print('train iter %d loss %f'%(iter, iter_loss))
 
         if iter % 1000 == 0:
@@ -161,20 +161,20 @@ with tf.Session() as sess:
             print('valid loss on randome batch of 500 imgs: %f'%iter_loss)
             validation_loss.append(iter_loss)
 
-        for X_batch, _ in test_batch:
-            print('tst')
-            test_loss += sess.run(loss, {encoder.input: X_batch})
-        print('test loss: %f'%(test_loss/y_test.shape[0]))
-
-        decoder_filters = D.eval()
-        decoder_filters_path = DIR_PATH + 'logdir/data/decoder_filters'
-        np.save(decoder_filters_path, decoder_filters)
-        print('saved decoder filters at path: %s'%decoder_filters_path)
+    for X_batch, _ in test_batch:
+        test_loss += sess.run(loss, {encoder.input: X_batch})
+    print('='*40)    
+    print('test loss: %f'%(test_loss/y_test.shape[0]))
+    print('='*40) 
+    decoder_filters = D.eval()
+    decoder_filters_path = DIR_PATH + 'logdir/data/decoder_filters'
+    np.save(decoder_filters_path, decoder_filters)
+    print('saved decoder filters at path: %s'%decoder_filters_path)
 
 
 plt.figure()
-plt.plot(args.num_steps, train_loss, 'r', label='test loss')
-plt.plot(args.num_steps//1000, validation_loss, 'g', label='validation loss' )
+plt.plot(range(args.num_steps), train_loss, 'r', label='test loss')
+plt.plot(range(args.num_steps//1000), validation_loss, 'g', label='validation loss' )
 plt.ylabel('loss')
 plt.xlabel('#iter')
 plt.legend(loc='upper right')
