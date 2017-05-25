@@ -83,14 +83,15 @@ with tf.variable_scope('encoder'):
                                              kernel_size=args.kernel_size,
                                              kernel_count=args.kernel_count)
 encoder.build_model()
+print('out shape {}'.format(encoder.output.get_shape()))
 with tf.variable_scope('decoder'):
     init_de = tf.random_normal([args.kernel_size, args.kernel_size,
-                                args.kernel_count, 1])
+                                args.kernel_count, 1], stddev=0.5)
     D = tf.Variable(init_de)
     Xhat = tf.nn.conv2d(encoder.output2D, D, strides=[1, 1, 1, 1], padding='SAME')
 
 loss = tf.reduce_mean(tf.square(encoder.input2D - Xhat)) + \
-       0.5 / 8 * tf.reduce_sum(tf.abs(encoder.output))
+       0.5 / 8 * tf.reduce_sum(tf.reduce_mean(tf.abs(encoder.output), axis=0))
 
 #######################################################
 #   Training Vars - optimizers and batch generators
@@ -140,7 +141,7 @@ with tf.Session() as sess:
 
         X_batch, _ = train_batch.next()
 
-        if iter % 10 == 0:
+        if (iter + 1) % 10 == 0:
             _, iter_loss = sess.run([optimizer_de, loss], {encoder.input: X_batch})
         else:
             _, iter_loss = sess.run([optimizer_en, loss], {encoder.input: X_batch})
@@ -151,7 +152,7 @@ with tf.Session() as sess:
             print('epoch %d: loss val:%f'%(iter//X_train.shape[0], epoch_loss / X_train.shape[0]))
             epoch_loss = 0
 
-        if iter % 500 == 0:
+        if iter % 1 == 500:
             print('train iter %d loss %f'%(iter, iter_loss))
 
         if iter % 1000 == 0:
@@ -161,24 +162,44 @@ with tf.Session() as sess:
             print('valid loss on randome batch of 500 imgs: %f'%iter_loss)
             validation_loss.append(iter_loss)
 
+    test_iter = 0
     for X_batch, _ in test_batch:
+	test_iter += 1
         test_loss += sess.run(loss, {encoder.input: X_batch})
     print('='*40)    
-    print('test loss: %f'%(test_loss/y_test.shape[0]))
+    print('test loss: %f'%(test_loss/test_iter))
     print('='*40) 
     decoder_filters = D.eval()
     decoder_filters_path = DIR_PATH + 'logdir/data/decoder_filters'
     np.save(decoder_filters_path, decoder_filters)
     print('saved decoder filters at path: %s'%decoder_filters_path)
 
-
 plt.figure()
-plt.plot(range(args.num_steps), train_loss, 'r', label='test loss')
-plt.plot(range(args.num_steps//1000), validation_loss, 'g', label='validation loss' )
+plt.plot(range(len(train_loss) - 1), train_loss[1:])
 plt.ylabel('loss')
 plt.xlabel('#iter')
-plt.legend(loc='upper right')
-plt.title('loss = ||decode(encode(X)) - X||_2^2 + lamda||encode(X)||_1')
-fig_path = DIR_PATH + 'logdir/plots/validtrainloss'
+plt.title('train loss')
+fig_path = DIR_PATH + 'logdir/plots/trainloss'
 plt.savefig(fig_path)
 print('plot saved in path: %s'%fig_path)
+
+plt.figure()
+plt.plot(range(len(validation_loss) - 1), validation_loss[1:])
+plt.ylabel('loss')
+plt.xlabel('#iter')
+fig_path = DIR_PATH + 'logdir/plots/validloss'
+plt.savefig(fig_path)
+print('plot saved in path: %s'%fig_path)
+
+plt.figure()
+fid = 0
+for f in decoder_filters.T:
+    print(fid)
+    print(f.shape)
+    plt.subplot(8, 8, fid+1)
+    plt.imshow(f, cmap=plt.cm.gray_r, interpolation='nearest')
+    fid += 1
+plt.savefig(DIR_PATH + 'logdir/plots/filters.png')
+print('seved plot of dict filter atoms in {}'.format(DIR_PATH + 'logdir/plots/filters.png'))
+
+
