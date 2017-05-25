@@ -60,8 +60,8 @@ class LISTAConvDict2d (ApproxSC):
                            for _ in range(unroll_count)]
             init_kers = tf.random_normal([self.kernel_size, self.kernel_size,
                                           self.input_channels, self.amount_of_kernals])
-            self._We = tf.Variable(init_kers)
-            self._Wd = tf.Variable(tf.transpose(init_kers, [0, 1, 3, 2]))
+            self._We = tf.Variable(init_kers, name='We')
+            self._Wd = tf.Variable(tf.transpose(init_kers, [0, 1, 3, 2]), name='Wd')
 
     def build_model(self):
         shrinkge_fn = self._shrinkge()
