@@ -152,7 +152,7 @@ with tf.Session() as sess:
             print('epoch %d: loss val:%f' % (iter//X_train.shape[0], epoch_loss / X_train.shape[0]))
             epoch_loss = 0
 
-        if iter % 1 == 500:
+        if (iter - 1) % 500 == 0:
             print('train iter %d loss %f' % (iter, iter_loss))
 
         if iter % 5000 == 0:
@@ -169,8 +169,8 @@ with tf.Session() as sess:
 
                 valid_loss += iter_loss
             valid_loss /= (X_valid.shape[0]/500)
-            print('valid loss: %f' % iter_loss)
-            validation_loss.append(iter_loss)
+            print('valid loss: %f encoded sparsity: %f' % (valid_loss, valid_sparsity_out[-1]))
+            validation_loss.append(valid_loss)
 
     test_iter = 0
     for X_batch, _ in test_batch:
@@ -222,8 +222,8 @@ plt.savefig(fig_path)
 print('plot saved in path: %s' % fig_path)
 
 plt.figure()
-plt.plot(range(len(valid_sparsity_out)), valid_sparsity_out, 'r', label='sparsity of input image')
-plt.plot(range(len(valid_sparsity_in)), valid_sparsity_in, 'g', label='sparsity of encoder out')
+plt.plot(range(len(valid_sparsity_out)), valid_sparsity_out, 'r', label='sparsity of encoded  image')
+plt.plot(range(len(valid_sparsity_in)), valid_sparsity_in, 'g', label='sparsity of original image')
 plt.legend(loc='upper right')
 sc_plot = DIR_PATH + 'logdir/plots/sparsity.png'
 plt.savefig(sc_plot)
@@ -233,8 +233,6 @@ plt.figure()
 fid = 0
 decoder_filters = np.squeeze(decoder_filters)
 for f in decoder_filters.T:
-    print(fid)
-    print(f.shape)
     plt.subplot(8, 8, fid+1)
     plt.imshow(f, cmap='gray')
     fid += 1
