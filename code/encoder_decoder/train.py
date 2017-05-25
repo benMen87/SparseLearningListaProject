@@ -29,11 +29,11 @@ parser.add_argument('-kc', '--kernel_count', default=64, type=int,
 parser.add_argument('-u', '--unroll_count', default=5,
                     type=int,
                     help='Amount of Reccurent time steps for decoder')
-parser.add_argument('-o', '--output_dir_path',
-                    default='',
-                    type=str,
-                    help='output directory to save model if non is given\
-                          model wont be saved')
+parser.add_argument('--save_model', dest='save_model', action='store_true')
+parser.add_argument('--load_model', dest='load_model', action='store_true')
+
+
+
 args = parser.parse_args()
 
 
@@ -76,19 +76,26 @@ in_encoder_shape = 28 * 28
 out_encoder_shape = args.kernel_count * in_encoder_shape
 We_shape = (out_encoder_shape, in_encoder_shape)
 
+output = DIR_PATH + 'logdir/data/'
+if args.load_model:
+    print('loading model from %s' % output)
+    init_dict = np.load(output + 'encoder')
+    init_de = np.load(output + 'decoder')
+else:
+    init_dict = {}
+    init_de = tf.random_normal([args.kernel_size, args.kernel_size,
+                                args.kernel_count, 1])
+
 with tf.variable_scope('encoder'):
     encoder = sparse_encoder.LISTAConvDict2d(We_shape=We_shape,
                                              unroll_count=args.unroll_count,
                                              L=8, batch_size=args.batch_size,
                                              kernel_size=args.kernel_size,
-                                             kernel_count=args.kernel_count)
+                                             kernel_count=args.kernel_count,
+                                             init_params_dict=init_dict)
 encoder.build_model()
-print('out shape {}'.format(encoder.output.get_shape()))
 with tf.variable_scope('decoder'):
-    init_de = tf.random_normal([args.kernel_size, args.kernel_size,
-                                args.kernel_count, 1])
     D = tf.Variable(init_de, name='decoder')
-
     Xhat = tf.nn.conv2d(encoder.output2D, D, strides=[1, 1, 1, 1], padding='SAME')
 
 loss = tf.reduce_mean(tf.square(encoder.input2D - Xhat)) + \
@@ -125,7 +132,7 @@ train_batch = nextbatch(X_train, Y_train, args.batch_size)
 test_batch = nextbatch(X_test, Y_test, 500, run_once=True)
 
 ###################################################################
-#                Training   +   Results 
+#                Training   +   Results
 ###################################################################
 
 train_loss = []
@@ -178,6 +185,15 @@ with tf.Session() as sess:
         test_loss += sess.run(loss, {encoder.input: X_batch})
     print('='*40)
     print('test loss: %f' % (test_loss/test_iter))
+
+    if args.save_model:
+        output = DIR_PATH + 'logdir/data/'
+        print('saving model to %s' % output)
+        We = encoder.We.eval()
+        theta = sess.run(encoder._theta)
+        Wd = encoder.Wd.eval()
+        np.savez(output + 'encoder', We=We, theta=theta, Wd=Wd)
+        np.savez(output + 'decoder', D=D.eval())
 
     # plot example image
     i = np.random.randint(X_test.shape[0], size=1)
