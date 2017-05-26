@@ -250,7 +250,7 @@ fid = 0
 decoder_filters = np.squeeze(decoder_filters)
 for f in decoder_filters.T:
     plt.subplot(8, 8, fid+1)
-    plt.imshow(f, cmap='gray')
+    plt.imshow(f.T, cmap='gray')
     fid += 1
 plt.savefig(DIR_PATH + 'logdir/plots/filters.png')
 print('seved plot of dict filter atoms in {}'.format(DIR_PATH + 'logdir/plots/filters.png'))
