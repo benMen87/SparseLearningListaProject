@@ -8,7 +8,6 @@ import lista_convdict2d
 import tensorflow as tf
 import shutil
 import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 from sparse_coding import cod, ista
@@ -180,11 +179,11 @@ if __name__ == '__main__':
                         type=int, help='size of train batches')
 
     parser.add_argument('-tr', '--train_path',
-                        default='/../../dct_data/trainset.npz', type=str,
+                        default='/../../convdict_data/trainset.npz', type=str,
                         help='Path to train data')
 
     parser.add_argument('-ts', '--test_path',
-                        default='/../../dct_data/testset.npz', type=str,
+                        default='/../../convdict_data/testset.npz', type=str,
                         help='Load train data')
 
     parser.add_argument('-r', '--ratio', default=0.2, type=float,
@@ -196,7 +195,7 @@ if __name__ == '__main__':
     parser.add_argument('-nw', '--not_warm_start', action='store_true',
                         help='if specified initlize ver randomly')
 
-    parser.add_argument('-u', '--unroll_count', default=[2],
+    parser.add_argument('-u', '--unroll_count', default=[1],
                         type=int, nargs='+',
                         help='Amount of times to run lcod/list block')
 
@@ -214,7 +213,7 @@ if __name__ == '__main__':
                         help='amount of kernal to use in lista_conv')
 
     parser.add_argument('-dp', '--dictionary_path',
-                        default='/../../dct_data/Wd.npy')
+                        default='/../../convdict2d_data/Wd.npy')
 
     parser.add_argument('-l', '--log_dir_path',
                         default='../../lcod_logdir/logdir', type=str,
@@ -228,7 +227,7 @@ if __name__ == '__main__':
                               model wont be saved')
     # /../../dct_data/saved_model/
     parser.add_argument('-lm', '--load_model_path',
-                        default='../../convdict2d_data/saved_model/', type=str,
+                        default='', type=str,
                         help='output directory to save model if non is given\
                               model wont be saved')
 
@@ -262,7 +261,7 @@ if __name__ == '__main__':
             tst = 'lista'
         elif args.model == 'lista_convdict':
             tst = 'lista_convdict'
-            filter_arr = np.load(DIR_PATH + '/../../covdict_data/filter_arr.npy')
+            filter_arr = np.load(DIR_PATH + '/../../convdict_data/filter_arr.npy')
             L = max(abs(np.linalg.eigvals(np.matmul(We, We.T))))
             model = lista_convdict.LISTAConvDict(We_shape=We_shape,
                                                  unroll_count=unroll_count,
@@ -308,16 +307,17 @@ if __name__ == '__main__':
                 init_dict['theta'] = theta
                 filter_arr = []
             else:
-                filter_arr = [np.random.randn(args.kernal_size, args.kernal_size)
-                              for _ in range(args.kernal_count)]
-                filter_arr = np.array([f/np.linalg.norm(f) for f in filter_arr])
-                We_shape = (len(filter_arr)*We_shape[1], We_shape[1])
+                filter_arr = np.load(DIR_PATH + '/../../convdict2d_data/filter_arr.npy')
+                # filter_arr = [np.random.randn(args.kernal_size, args.kernal_size)
+                #               for _ in range(args.kernal_count)]
+                # filter_arr = np.array([f/np.linalg.norm(f) for f in filter_arr])
+                We_shape = We.shape
 
             model = lista_convdict2d.LISTAConvDict2d(We_shape=We_shape,
                                                      unroll_count=unroll_count,
                                                      filter_arr=filter_arr, L=L,
                                                      batch_size=args.batch_size,
-                                                     kernal_size=args.kernal_size,
+                                                     kernel_size=args.kernal_size,
                                                      init_params_dict=init_dict)
         else:
             tst = 'lista_cov'
@@ -325,7 +325,7 @@ if __name__ == '__main__':
                                          unroll_count=unroll_count,
                                          We=We, batch_size=args.batch_size,
                                          kernal_size=args.kernal_size,
-                                         amount_of_kernals=args.kernal_count)
+                                         amount_of_kernals=args.kernel_count)
 
         with tf.Session() as sess:
             model.build_model()

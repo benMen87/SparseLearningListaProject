@@ -36,11 +36,15 @@ class LISTAConvDict2d (ApproxSC):
                                        shape=[1, self.patch_dim, self.patch_dim, self.amount_of_kernals],
                            dtype=tf.float32), name='theta')
                            for _ in range(unroll_count)]
-            transpose_filt = np.array([f[::-1] for f in filter_arr])
-            self._Wd = tf.Variable(np.expand_dims(transpose_filt.T, axis=-1),
-                                   name='Wd', dtype=tf.float32)
-            self._We = (1/L)*tf.Variable(np.expand_dims(filter_arr.T, axis=-2),
-                                         name='We', dtype=tf.float32)
+
+            flipfilter_arr = np.array([np.flip(np.flip(f,0),1) for f in filter_arr])
+            flipfilter_arr = np.expand_dims(flipfilter_arr, axis=-1)
+            flipfilter_arr = np.transpose(flipfilter_arr, [1,2,3,0])
+            filter_arr = np.expand_dims(filter_arr, axis=-1)
+            filter_arr = np.transpose(filter_arr, [1,2,0,3])
+            self._We = (1/L)*tf.Variable(flipfilter_arr, name='We', dtype=tf.float32)
+            self._Wd = tf.Variable(filter_arr, name='Wd', dtype=tf.float32)
+            
         elif init_params_dict:
             self.kernel_size = init_params_dict['Wd'].shape[1]
             self.amount_of_kernals = init_params_dict['Wd'].shape[2]
@@ -54,11 +58,10 @@ class LISTAConvDict2d (ApproxSC):
         else:
             self.amount_of_kernals = kernel_count
             self.kernel_size = kernel_size
-            self._theta = [tf.Variable(tf.constant(0.5/L,
-                           shape=[1, self.patch_dim, self.patch_dim, self.amount_of_kernals],
-                           dtype=tf.float32), name='theta')
-                           for _ in range(unroll_count)]
-            init_kers = tf.random_normal([self.kernel_size, self.kernel_size,
+            self._theta = [0.5/L * tf.ones(shape=[1, self.patch_dim, self.patch_dim, self.amount_of_kernals],
+                           dtype=tf.float32, name='theta'+str(u))
+                           for u in range(unroll_count)]
+            init_kers = tf.truncated_normal([self.kernel_size, self.kernel_size,
                                           self.input_channels, self.amount_of_kernals])
             self._We = tf.Variable(init_kers, name='We')
             self._Wd = tf.Variable(tf.transpose(init_kers, [0, 1, 3, 2]), name='Wd')
@@ -69,22 +72,22 @@ class LISTAConvDict2d (ApproxSC):
         B = tf.nn.conv2d(tf.reshape(self._X, [-1, self.patch_dim, self.patch_dim, 1]),
                          self._We, strides=[1, 1, 1, 1],
                          padding='SAME', name='bias')
-        self._Z.append(shrinkge_fn(B, self._theta[0]))
+        self._Z = shrinkge_fn(B, self._theta[0], 'Z0')
         #
         # run unrolling
         for t in range(1, self._unroll_count):
-            conv_wd = tf.nn.conv2d(self._Z[0], self._Wd,
+            print('HERER!!!!')
+            conv_wd = tf.nn.conv2d(self._Z, self._Wd,
                                    strides=[1, 1, 1, 1],
                                    padding='SAME', name='convWd')
 
             conv_we = tf.nn.conv2d(conv_wd, self._We,
                                    strides=[1, 1, 1, 1],
                                    padding='SAME', name='convWe')
-            res = self._Z[0] - conv_we
+            res = self._Z - conv_we
             res_add_bias = res + B
 
-            # theta_2d = tf.reshape(self._theta[t], [1, self.input_size, self.amount_of_kernals])
-            self._Z[0] = shrinkge_fn(res_add_bias, self._theta[t])
+            self._Z = shrinkge_fn(res_add_bias, self._theta[t], 'Z'+str(t))
 
     @property
     def loss(self):
@@ -99,7 +102,7 @@ class LISTAConvDict2d (ApproxSC):
         return self._loss
 
     def output_shape(self):
-        return self._Z[-1].get_shape()
+        return self._Z.get_shape()
 
     @property
     def Wd(self):
@@ -107,7 +110,7 @@ class LISTAConvDict2d (ApproxSC):
 
     @property
     def output2D(self):
-        return self._Z[-1]
+        return self._Z
     
     @property
     def input2D(self):
@@ -115,12 +118,12 @@ class LISTAConvDict2d (ApproxSC):
 
     @property
     def output(self):
-        return tf.reshape(tf.transpose(self._Z[-1], [0, 3, 1, 2]),
+        return tf.reshape(tf.transpose(self._Z, [0, 3, 1, 2]),
                           [-1, self.input_size * self.amount_of_kernals])
 
     @property
     def output2D(self):
-        return self._Z[-1]
+        return self._Z
 
     @property
     def batch_size(self):

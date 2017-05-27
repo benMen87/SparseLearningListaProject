@@ -45,8 +45,8 @@ class ApproxSC(object):
         else:
             raise NotImplementedError('Double Tanh not implemented')
 
-    def _soft_thrsh(self, B, theta):
-        return tf.nn.relu(B-theta) - tf.nn.relu(-B-theta)
+    def _soft_thrsh(self, B, theta, name=''):
+        return tf.subtract(tf.nn.relu(B-theta), tf.nn.relu(-B-theta), name=name)
 
     def _double_tanh(self, B):
         raise NotImplementedError('Double Tanh not implemented')

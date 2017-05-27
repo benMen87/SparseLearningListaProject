@@ -59,7 +59,7 @@ class LISTAConvDict (ApproxSC):
         B = tf.nn.conv1d(tf.expand_dims(self._X, axis=-1),
                          self._We, stride=1,
                          padding='SAME', name='bias')
-        self._Z.append(shrinkge_fn(B, self._theta[0]))
+        self._Z.append(shrinkge_fn(B, self._theta[0], 'Z0'))
         #
         # run unrolling
         for t in range(1, self._unroll_count):
@@ -71,7 +71,7 @@ class LISTAConvDict (ApproxSC):
             res = self._Z[t-1] - conv_we
             res_add_bias = res + B
 
-            self._Z.append(shrinkge_fn(res_add_bias, self._theta[t]))
+            self._Z.append(shrinkge_fn(res_add_bias, self._theta[t], 'Z{}'.format(t)))
 
     @property
     def loss(self):
