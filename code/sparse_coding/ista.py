@@ -7,12 +7,15 @@ class ISTA(object):
     """
     Learn sparse representation of input
     """
-    def __init__(self, Wd, max_iter=1000, thresh=1e-4, alpha=0.5, verbose=True):
+    def __init__(self, Wd, L=None, max_iter=1000, thresh=1e-4, alpha=0.5, verbose=True):
         self.max_iter = max_iter
         self.thresh = thresh
         self.alpha = alpha
         self.Wd = Wd
-        self.L = max(abs(np.linalg.eigvals(np.matmul(Wd.T, Wd))))
+        if L is None:
+            L = max(abs(np.linalg.eigvals(np.matmul(Wd.T, Wd))))
+        self.L = L
+        
         self.loss = lambda Wd, X, Z: 0.5*np.linalg.norm(X - np.matmul(Wd, Z))**2 + self.alpha*np.linalg.norm(Z, 1) 
 
         if verbose:

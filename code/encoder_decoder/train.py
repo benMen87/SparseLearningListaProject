@@ -1,16 +1,16 @@
 import os
 import sys
+import tensorflow as tf
 
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))+'/'
 sys.path.append(os.path.abspath(DIR_PATH + '../approx_sparse_coding'))
 
 import argparse
 import numpy as np
-import tensorflow as tf
+# 
+# from tensorflow.python import debug as tf_debug
 from keras.datasets import mnist
 from keras.utils import np_utils
-import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import lista_convdict2d as sparse_encoder
@@ -18,9 +18,9 @@ import lista_convdict2d as sparse_encoder
 parser = argparse.ArgumentParser(description='Sparse encoder decoder model')
 
 
-parser.add_argument('-b', '--batch_size', default=100,
+parser.add_argument('-b', '--batch_size', default=50,
                     type=int, help='size of train batches')
-parser.add_argument('-n', '--num_steps', default=100000, type=int,
+parser.add_argument('-n', '--num_steps', default=30000, type=int,
                     help='number of training steps')
 parser.add_argument('-ks', '--kernel_size', default=3, type=int,
                     help='kernel size to be used in lista_conv')
@@ -31,7 +31,7 @@ parser.add_argument('-u', '--unroll_count', default=5,
                     help='Amount of Reccurent time steps for decoder')
 parser.add_argument('--save_model', dest='save_model', action='store_true')
 parser.add_argument('--load_model', dest='load_model', action='store_true')
-
+parser.add_argument('--debug', dest='debug', action='store_true')
 
 
 args = parser.parse_args()
@@ -83,8 +83,8 @@ if args.load_model:
     init_de = np.load(output + 'decoder')
 else:
     init_dict = {}
-    init_de = tf.random_normal([args.kernel_size, args.kernel_size,
-                                args.kernel_count, 1])
+    init_de = tf.truncated_normal([args.kernel_size, args.kernel_size,
+                                args.kernel_count, 1], stddev=0.01)
 
 with tf.variable_scope('encoder'):
     encoder = sparse_encoder.LISTAConvDict2d(We_shape=We_shape,
@@ -94,20 +94,22 @@ with tf.variable_scope('encoder'):
                                              kernel_count=args.kernel_count,
                                              init_params_dict=init_dict)
 encoder.build_model()
+
 with tf.variable_scope('decoder'):
     D = tf.Variable(init_de, name='decoder')
     Xhat = tf.nn.conv2d(encoder.output2D, D, strides=[1, 1, 1, 1], padding='SAME')
 
 loss = tf.reduce_mean(tf.square(encoder.input2D - Xhat)) + \
-       0.5 / 8 * tf.reduce_sum(tf.reduce_mean(tf.abs(encoder.output), axis=0))
+       0.1 * tf.reduce_sum(tf.reduce_mean(tf.abs(encoder.output), axis=0))
+
 
 #######################################################
 #   Training Vars - optimizers and batch generators
 #######################################################
 encoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "encoder/")
 decoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "decoder/")
-optimizer_en = tf.train.AdamOptimizer(0.001).minimize(loss, var_list=encoder_vars)
-optimizer_de = tf.train.AdamOptimizer(0.001).minimize(loss, var_list=decoder_vars)
+optimizer_en = tf.train.GradientDescentOptimizer(0.001).minimize(loss, var_list=encoder_vars)
+optimizer_de = tf.train.GradientDescentOptimizer(0.001).minimize(loss, var_list=decoder_vars)
 
 
 def nextbatch(X, Y, batch_size, run_once=False):
@@ -135,6 +137,10 @@ test_batch = nextbatch(X_test, Y_test, 500, run_once=True)
 #                Training   +   Results
 ###################################################################
 
+
+def all_zero(datum, tensor):
+    return np.count_nonzero(tensor) == 0
+
 train_loss = []
 validation_loss = []
 validation_spacity = []
@@ -143,6 +149,10 @@ test_loss = 0
 with tf.Session() as sess:
     tf.global_variables_initializer().run(session=sess)
     print('Initialized')
+    # if args.debug:
+    #     sess = tf_debug.LocalCLIDebugWrapperSession(sess, ui_type='readline')
+    #     sess.add_tensor_filter("has_inf_or_nan", tf_debug.has_inf_or_nan)
+    #     sess.add_tensor_filter("all_zero", all_zero)
 
     for iter in range(1, args.num_steps + 1):
 
@@ -151,7 +161,7 @@ with tf.Session() as sess:
         if iter % 10 == 0:
             _, iter_loss = sess.run([optimizer_de, loss], {encoder.input: X_batch})
         else:
-            _, iter_loss = sess.run([optimizer_en, loss], {encoder.input: X_batch})
+            Xin, Xout, Z, iter_loss = sess.run([encoder.input2D, Xhat, encoder.output2D, loss], {encoder.input: X_batch})
         train_loss.append(iter_loss)
 
         epoch_loss += iter_loss
