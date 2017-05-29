@@ -58,13 +58,13 @@ class LISTAConvDict2d (ApproxSC):
         else:
             self.amount_of_kernals = kernel_count
             self.kernel_size = kernel_size
-            self._theta = [tf.truncated_normal(shape=[1, self.patch_dim, self.patch_dim, self.amount_of_kernals],
-                           			      dtype=tf.float32, stddev=1, name='theta'+str(u))
+            self._theta = [0.2 * tf.Variable(tf.ones(shape=[1, self.patch_dim, self.patch_dim, self.amount_of_kernals],
+                           			      dtype=tf.float32), name='theta'+str(u))
                            for u in range(unroll_count)]
             init_We = tf.truncated_normal([self.kernel_size, self.kernel_size,
-                                          self.input_channels, self.amount_of_kernals], stddev=1)
+                                          self.input_channels, self.amount_of_kernals], stddev=0.05)
             init_Wd = tf.truncated_normal([self.kernel_size, self.kernel_size,
-                                           self.amount_of_kernals, self.input_channels], stddev=1)
+                                           self.amount_of_kernals, self.input_channels], stddev=0.05)
             self._We = tf.Variable(init_We, name='We')
             self._Wd = tf.Variable(init_Wd, name='Wd')
 

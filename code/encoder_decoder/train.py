@@ -17,13 +17,13 @@ import lista_convdict2d as sparse_encoder
 parser = argparse.ArgumentParser(description='Sparse encoder decoder model')
 
 
-parser.add_argument('-b', '--batch_size', default=50,
+parser.add_argument('-b', '--batch_size', default=2,
                     type=int, help='size of train batches')
 parser.add_argument('-n', '--num_epochs', default=30000, type=int,
                     help='number of epochs steps')
 parser.add_argument('-ks', '--kernel_size', default=3, type=int,
                     help='kernel size to be used in lista_conv')
-parser.add_argument('-kc', '--kernel_count', default=64, type=int,
+parser.add_argument('-kc', '--kernel_count', default=2, type=int,
                     help='amount of kernel to use in lista_conv')
 parser.add_argument('-u', '--unroll_count', default=5,
                     type=int,
@@ -85,7 +85,7 @@ if args.load_model:
 else:
     init_dict = {}
     init_de = tf.truncated_normal([args.kernel_size, args.kernel_size,
-                                args.kernel_count, 1], stddev=1)
+                                args.kernel_count, 1], stddev=0.05)
 
 with tf.variable_scope('encoder'):
     encoder = sparse_encoder.LISTAConvDict2d(We_shape=We_shape,
@@ -99,9 +99,10 @@ encoder.build_model()
 with tf.variable_scope('decoder'):
     D = tf.Variable(init_de, name='decoder')
     Xhat = tf.nn.conv2d(encoder.output2D, D, strides=[1, 1, 1, 1], padding='SAME')
-
-loss = 0 * tf.reduce_mean(tf.reduce_sum(tf.square(encoder.input2D - Xhat), [1, 2])) + \
-       tf.reduce_mean(tf.reduce_sum(tf.abs(encoder.output), 1)) 
+l_rec = tf.reduce_mean(tf.reduce_sum(tf.square(encoder.input2D - Xhat), [1, 2]))
+l_sparse = tf.reduce_mean(tf.reduce_sum(tf.abs(encoder.output), 1))  
+loss =  l_rec + 0.5 * l_sparse
+       
 
 #######################################################
 #   Training Vars - optimizers and batch generators
@@ -153,25 +154,25 @@ with tf.Session() as sess:
         sess.add_tensor_filter("all_zero", all_zero)
 
     for epoch in range(1, args.num_epochs + 1):
-	epoch_loss = 0
-	train_batch = nextbatch(X_train, Y_train, args.batch_size, run_once=True)
-	b_num = 0
+        epoch_loss = 0
+        train_batch = nextbatch(X_train, Y_train, args.batch_size, run_once=True)
+        b_num = 0
         for X_batch, _  in train_batch:
-	    b_num += 1
+            b_num += 1
             _, iter_loss = sess.run([optimizer_en, loss], {encoder.input: X_batch})
-	    if epoch  > 10:
+            if epoch  > 10:
                 _, iter_loss  = sess.run([optimizer_de, loss], {encoder.input: X_batch})
 
             train_loss.append(iter_loss)
 
             epoch_loss += iter_loss
-	    # if b_num % 500 == 0:
-            #    _Wd, _We, Z, _theta,  _D, iter_loss = sess.run([encoder._Wd, encoder._We, encoder.output,encoder._theta,  D,  loss],
-            #                                                   {encoder.input: X_batch})
-            #    print('batch num %d in epoch %d loss %f' % (b_num, epoch, iter_loss))
-            #    print('sanity check:')
-            #    print('encoder/decoder abs max vals: Wd-{}, We-{} D-{}'.format(np.max(np.abs(_Wd)), np.max(np.abs(_We)), np.max(np.abs(_D))))
-            #    print('max thata: {} encoder sparse: {}'.format(np.max(np.abs(_theta)), np.count_nonzero(Z)))
+            if b_num % 500 == 0:
+                ret_list = [encoder._Wd, encoder._We, encoder.output,encoder._theta,  D,  l_rec, l_sparse, encoder.output, Xhat]
+                _Wd, _We, Z, _theta,  _D, ll_rec, ll_sparse, Z, XX = sess.run(ret_list, {encoder.input: X_batch})
+                print('batch num %d in epoch %d loss %f' % (b_num, epoch, iter_loss))
+                print('sanity check:')
+                print('encoder/decoder abs max vals: Wd-{}, We-{} D-{}'.format(np.max(np.abs(_Wd)), np.max(np.abs(_We)), np.max(np.abs(_D))))
+                print('max thata: {} encoder sparse: {}'.format(np.max(np.abs(_theta)), np.count_nonzero(Z)))
 
             if b_num % 200 == 0:
                 print('cross validation')
@@ -179,18 +180,20 @@ with tf.Session() as sess:
                 valid_loss = 0
                 valid_sparsity_out = []
                 valid_sparsity_in = []
-		v_itr = 0
+                v_itr = 0
+                sp_in_itr = 0
+                sp_out_itr = 0
                 for X_batch, _ in vaild_batch:
-		    v_itr += 1
-                    iter_loss, enc_out = sess.run([loss, encoder.output],
-                                                  {encoder.input: X_batch})
-                    valid_sparsity_out.append(np.count_nonzero(enc_out)/enc_out.shape[0])
-                    valid_sparsity_in.append(np.count_nonzero(X_batch)/X_batch.shape[0])
+                    v_itr += 1
+                    iter_loss, enc_out = sess.run([loss, encoder.output], {encoder.input: X_batch})
+                    sp_out_itr += np.count_nonzero(enc_out)/enc_out.shape[0]
+                    sp_in_itr += np.count_nonzero(X_batch)/X_batch.shape[0]
                     valid_loss += iter_loss
                 valid_loss /= v_itr
-                print('valid loss: %f encoded sparsity: %f' % (valid_loss, valid_sparsity_out[-1]))
                 validation_loss.append(valid_loss)
-
+                valid_sparsity_out.append(sp_out_itr/v_itr)
+                valid_sparsity_in.append(sp_in_itr/v_itr)
+                print('valid loss: %f encoded sparsity: %f' % (valid_loss, valid_sparsity_out[-1]))
         print('epoch %d: loss val:%f' % (epoch, args.batch_size  * epoch_loss / X_train.shape[0]))
 
     test_iter = 0
