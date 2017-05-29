@@ -58,13 +58,15 @@ class LISTAConvDict2d (ApproxSC):
         else:
             self.amount_of_kernals = kernel_count
             self.kernel_size = kernel_size
-            self._theta = [0.001 * tf.ones(shape=[1, self.patch_dim, self.patch_dim, self.amount_of_kernals],
-                           dtype=tf.float32, name='theta'+str(u))
+            self._theta = [tf.truncated_normal(shape=[1, self.patch_dim, self.patch_dim, self.amount_of_kernals],
+                           			      dtype=tf.float32, stddev=1, name='theta'+str(u))
                            for u in range(unroll_count)]
-            init_kers = tf.truncated_normal([self.kernel_size, self.kernel_size,
-                                          self.input_channels, self.amount_of_kernals], stddev=0.01)
-            self._We = tf.Variable(init_kers, name='We')
-            self._Wd = tf.Variable(tf.transpose(init_kers, [0, 1, 3, 2]), name='Wd')
+            init_We = tf.truncated_normal([self.kernel_size, self.kernel_size,
+                                          self.input_channels, self.amount_of_kernals], stddev=1)
+            init_Wd = tf.truncated_normal([self.kernel_size, self.kernel_size,
+                                           self.amount_of_kernals, self.input_channels], stddev=1)
+            self._We = tf.Variable(init_We, name='We')
+            self._Wd = tf.Variable(init_Wd, name='Wd')
 
     def build_model(self):
         shrinkge_fn = self._shrinkge()
