@@ -17,20 +17,21 @@ import lista_convdict2d as sparse_encoder
 parser = argparse.ArgumentParser(description='Sparse encoder decoder model')
 
 
-parser.add_argument('-b', '--batch_size', default=2,
+parser.add_argument('-b', '--batch_size', default=3,
                     type=int, help='size of train batches')
-parser.add_argument('-n', '--num_epochs', default=30000, type=int,
+parser.add_argument('-n', '--num_epochs', default=5, type=int,
                     help='number of epochs steps')
 parser.add_argument('-ks', '--kernel_size', default=3, type=int,
                     help='kernel size to be used in lista_conv')
 parser.add_argument('-kc', '--kernel_count', default=2, type=int,
                     help='amount of kernel to use in lista_conv')
-parser.add_argument('-u', '--unroll_count', default=5,
+parser.add_argument('-u', '--unroll_count', default=2,
                     type=int,
                     help='Amount of Reccurent time steps for decoder')
 parser.add_argument('--save_model', dest='save_model', action='store_true')
 parser.add_argument('--load_model', dest='load_model', action='store_true')
 parser.add_argument('--debug', dest='debug', action='store_true')
+parser.add_argument('--name', default='lista_ed', type=str)
 
 
 args = parser.parse_args()
@@ -67,6 +68,23 @@ Y_test = np_utils.to_categorical(y_test, 10)
 (X_valid, Y_valid) = (X_train[:5000], Y_train[:5000])
 (X_train, Y_train) = (X_train[5000:], Y_train[5000:])
 
+#######################################################
+#   Log-network for tensorboard
+#######################################################
+tensorboard_path = DIR_PATH + 'logdir/tb/'
+
+def variable_summaries(var):
+    """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
+    with tf.name_scope('summaries'):
+      mean = tf.reduce_mean(var)
+      tf.summary.scalar('mean', mean)
+      with tf.name_scope('stddev'):
+        stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+      tf.summary.scalar('stddev', stddev)
+      tf.summary.scalar('max', tf.reduce_max(var))
+      tf.summary.scalar('min', tf.reduce_min(var))
+      tf.summary.histogram('histogram', var)
+
 ########################################################
 #       Build Models - Sparse Encoder Decoder
 ########################################################
@@ -95,14 +113,34 @@ with tf.variable_scope('encoder'):
                                              kernel_count=args.kernel_count,
                                              init_params_dict=init_dict)
 encoder.build_model()
-
 with tf.variable_scope('decoder'):
     D = tf.Variable(init_de, name='decoder')
     Xhat = tf.nn.conv2d(encoder.output2D, D, strides=[1, 1, 1, 1], padding='SAME')
+#
+# LOSS
 l_rec = tf.reduce_mean(tf.reduce_sum(tf.square(encoder.input2D - Xhat), [1, 2]))
 l_sparse = tf.reduce_mean(tf.reduce_sum(tf.abs(encoder.output), 1))  
 loss =  l_rec + 0.5 * l_sparse
-       
+
+#######################################################
+# Add vars to summary
+#######################################################
+with tf.name_scope('encoder'):
+    with tf.name_scope('We'):
+        variable_summaries(encoder._We)
+    with tf.name_scope('Wd'):
+        variable_summaries(encoder._Wd)
+        for i, t in enumerate(encoder._theta):
+            with tf.name_scope('theta'+str(i)):
+                variable_summaries(t)
+with tf.name_scope('decoder'):
+    variable_summaries(D)
+tf.summary.histogram('sp_encode', encoder.output2D)
+tf.summary.scalar('l1_loss', l_sparse)
+tf.summary.scalar('l2recon_loss', l_rec)
+tf.summary.scalar('total_loss', loss)
+tf.summary.image('input', encoder.input2D, max_outputs=3)
+tf.summary.image('output', Xhat, max_outputs=3)
 
 #######################################################
 #   Training Vars - optimizers and batch generators
@@ -135,19 +173,23 @@ test_batch = nextbatch(X_test, Y_test, 500, run_once=True)
 ###################################################################
 #                Training   +   Results
 ###################################################################
-
-
 def all_zero(datum, tensor):
     return np.count_nonzero(tensor) == 0
 
 train_loss = []
 validation_loss = []
-validation_spacity = []
+valid_sparsity_out = []
+valid_sparsity_in = []
 epoch_loss = 0
 test_loss = 0
 with tf.Session() as sess:
+
+    merged = tf.summary.merge_all()
+    train_summ_writer = tf.summary.FileWriter(tensorboard_path + args.name)
+    train_summ_writer.add_graph(sess.graph)
     tf.global_variables_initializer().run(session=sess)
     print('Initialized')
+
     if args.debug:
         sess = tf_debug.LocalCLIDebugWrapperSession(sess)
         sess.add_tensor_filter("has_inf_or_nan", tf_debug.has_inf_or_nan)
@@ -160,26 +202,20 @@ with tf.Session() as sess:
         for X_batch, _  in train_batch:
             b_num += 1
             _, iter_loss = sess.run([optimizer_en, loss], {encoder.input: X_batch})
-            if epoch  > 10:
+            if epoch  > 0:
                 _, iter_loss  = sess.run([optimizer_de, loss], {encoder.input: X_batch})
 
             train_loss.append(iter_loss)
 
             epoch_loss += iter_loss
-            if b_num % 500 == 0:
-                ret_list = [encoder._Wd, encoder._We, encoder.output,encoder._theta,  D,  l_rec, l_sparse, encoder.output, Xhat]
-                _Wd, _We, Z, _theta,  _D, ll_rec, ll_sparse, Z, XX = sess.run(ret_list, {encoder.input: X_batch})
-                print('batch num %d in epoch %d loss %f' % (b_num, epoch, iter_loss))
-                print('sanity check:')
-                print('encoder/decoder abs max vals: Wd-{}, We-{} D-{}'.format(np.max(np.abs(_Wd)), np.max(np.abs(_We)), np.max(np.abs(_D))))
-                print('max thata: {} encoder sparse: {}'.format(np.max(np.abs(_theta)), np.count_nonzero(Z)))
+            if b_num % 50 == 0:
+                summary, _, _ = sess.run([merged, optimizer_en, optimizer_de], {encoder.input: X_batch})
+                train_summ_writer.add_summary(summary, epoch * X_train.shape[0] + b_num )
 
-            if b_num % 200 == 0:
+            if b_num % 500 == 0:
                 print('cross validation')
                 vaild_batch = nextbatch(X_valid, Y_valid, 500, run_once=True)
                 valid_loss = 0
-                valid_sparsity_out = []
-                valid_sparsity_in = []
                 v_itr = 0
                 sp_in_itr = 0
                 sp_out_itr = 0
