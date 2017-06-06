@@ -212,7 +212,7 @@ with tf.Session() as sess:
                 summary, _, _ = sess.run([merged, optimizer_en, optimizer_de], {encoder.input: X_batch})
                 train_summ_writer.add_summary(summary, epoch * X_train.shape[0] + b_num )
 
-            if b_num % 500 == 0:
+            if b_num % 200 == 0:
                 print('cross validation')
                 vaild_batch = nextbatch(X_valid, Y_valid, 500, run_once=True)
                 valid_loss = 0
@@ -222,8 +222,8 @@ with tf.Session() as sess:
                 for X_batch, _ in vaild_batch:
                     v_itr += 1
                     iter_loss, enc_out = sess.run([loss, encoder.output], {encoder.input: X_batch})
-                    sp_out_itr += np.count_nonzero(enc_out)/enc_out.shape[0]
-                    sp_in_itr += np.count_nonzero(X_batch)/X_batch.shape[0]
+                    sp_out_itr += np.count_nonzero(enc_out)/500
+                    sp_in_itr += np.count_nonzero(X_batch)/500
                     valid_loss += iter_loss
                 valid_loss /= v_itr
                 validation_loss.append(valid_loss)
@@ -291,11 +291,12 @@ plt.savefig(fig_path)
 print('plot saved in path: %s' % fig_path)
 
 plt.figure()
-plt.plot(range(len(valid_sparsity_out)), valid_sparsity_out, 'r', label='sparsity of encoded  image')
+plt.plot(range(len(valid_sparsity_out)),  valid_sparsity_out, 'r', label='sparsity of encoded  image')
 plt.plot(range(len(valid_sparsity_in)), valid_sparsity_in, 'g', label='sparsity of original image')
 plt.legend(loc='upper right')
 sc_plot = DIR_PATH + 'logdir/plots/sparsity.png'
 plt.savefig(sc_plot)
+np.savez(DIR_PATH + 'logdir/data/sparse', IN=valid_sparsity_in, EN=valid_sparsity_out)
 print('plot of sparsity input vs encode in %s' % sc_plot)
 
 plt.figure()
