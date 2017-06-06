@@ -5,6 +5,8 @@ from PIL import Image
 import os
 import sys
 from collections import namedtuple
+from six.moves import cPickle
+import gzip
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(dir_path + '/..')

@@ -1,29 +1,29 @@
 import os
 import sys
 import tensorflow as tf
-
-DIR_PATH = os.path.dirname(os.path.realpath(__file__))+'/'
-sys.path.append(os.path.abspath(DIR_PATH + '../approx_sparse_coding'))
-
 import argparse
 import numpy as np
 from tensorflow.python import debug as tf_debug
-from keras.datasets import mnist
+from keras.datasets import mnist, cifar10
 from keras.utils import np_utils
 import matplotlib.pyplot as plt
 
+DIR_PATH = os.path.dirname(os.path.realpath(__file__))+'/'
+sys.path.append(os.path.abspath(DIR_PATH + '../approx_sparse_coding'))
+sys.path.append(os.path.abspath(DIR_PATH + '../'))
 import lista_convdict2d as sparse_encoder
+from Utils import stl10_input
 
 parser = argparse.ArgumentParser(description='Sparse encoder decoder model')
 
 
-parser.add_argument('-b', '--batch_size', default=3,
+parser.add_argument('-b', '--batch_size', default=16,
                     type=int, help='size of train batches')
 parser.add_argument('-n', '--num_epochs', default=5, type=int,
                     help='number of epochs steps')
-parser.add_argument('-ks', '--kernel_size', default=3, type=int,
+parser.add_argument('-ks', '--kernel_size', default=5, type=int,
                     help='kernel size to be used in lista_conv')
-parser.add_argument('-kc', '--kernel_count', default=2, type=int,
+parser.add_argument('-kc', '--kernel_count', default=5, type=int,
                     help='amount of kernel to use in lista_conv')
 parser.add_argument('-u', '--unroll_count', default=2,
                     type=int,
@@ -32,6 +32,7 @@ parser.add_argument('--save_model', dest='save_model', action='store_true')
 parser.add_argument('--load_model', dest='load_model', action='store_true')
 parser.add_argument('--debug', dest='debug', action='store_true')
 parser.add_argument('--name', default='lista_ed', type=str)
+parser.add_argument('--dataset', default='cifar10', choices=['mnist', 'stl10', 'cifar10'])
 
 
 args = parser.parse_args()
@@ -40,17 +41,31 @@ args = parser.parse_args()
 ###########################################################
 #                   Load Data Sets
 ###########################################################
+def rgb2gray(X):
+    r, g, b = X[..., 0], X[...,1], X[...,2]
+    return (0.2125 * r) + (0.7154 * g) + (0.0721 * b)
+
 
 #
 # load data
-(X_train, y_train), (X_test, y_test) = mnist.load_data()
+if args.dataset == 'mnist':
+    (X_train, _), (X_test, _) = mnist.load_data()
+elif args.dataset == 'stl10':  # Data set with unlabeld too large cant load fully to memory
+        (X_train, _), (X_test, _), X_unlabel = stl10_input.load_data(grayscale=True, unlabel_count=5)
+elif args.dataset == 'cifar10':
+    (X_train, _), (X_test, _) = cifar10.load_data()
+    X_train, X_test = rgb2gray(X_train), rgb2gray(X_test)
 
-print("training size: {}, test size: {}".format(y_train.shape[0],
-      y_test.shape[0]))
 
+    # (X_train, y_train), (X_test, y_test) = stl10_input.
+
+print("training size: {}, test size: {}".format(X_train.shape[0],
+      X_test.shape[0]))
+
+input_shape = X_train.shape
 # flatten for encoder
-X_train = X_train.reshape(X_train.shape[0], 28*28)
-X_test = X_test.reshape(X_test.shape[0], 28*28)
+X_train = X_train.reshape(X_train.shape[0], input_shape[1] * input_shape[2])
+X_test = X_test.reshape(X_test.shape[0], input_shape[1] * input_shape[2])
 
 # normilize data
 X_train = X_train.astype('float32')
@@ -61,12 +76,12 @@ X_test  -= np.mean(X_test, axis=1, keepdims=True)
 X_test /= np.std(X_test, axis=1, keepdims=True)
 
 # one hot
-Y_train = np_utils.to_categorical(y_train, 10)
-Y_test = np_utils.to_categorical(y_test, 10)
+# Y_train = np_utils.to_categorical(y_train, 10)
+# Y_test = np_utils.to_categorical(y_test, 10)
 
 # split train set
-(X_valid, Y_valid) = (X_train[:5000], Y_train[:5000])
-(X_train, Y_train) = (X_train[5000:], Y_train[5000:])
+X_valid = X_train[:5000]
+X_train = X_train[5000:]
 
 #######################################################
 #   Log-network for tensorboard
@@ -91,7 +106,7 @@ def variable_summaries(var):
 
 #
 # build encoder-decoder
-in_encoder_shape = 28 * 28
+in_encoder_shape = input_shape[1] * input_shape[2]
 out_encoder_shape = args.kernel_count * in_encoder_shape
 We_shape = (out_encoder_shape, in_encoder_shape)
 
@@ -103,7 +118,7 @@ if args.load_model:
 else:
     init_dict = {}
     init_de = tf.truncated_normal([args.kernel_size, args.kernel_size,
-                                args.kernel_count, 1], stddev=0.05)
+                                args.kernel_count, 1], stddev=1)
 
 with tf.variable_scope('encoder'):
     encoder = sparse_encoder.LISTAConvDict2d(We_shape=We_shape,
@@ -114,13 +129,13 @@ with tf.variable_scope('encoder'):
                                              init_params_dict=init_dict)
 encoder.build_model()
 with tf.variable_scope('decoder'):
-    D = tf.Variable(init_de, name='decoder')
+    D = tf.nn.l2_normalize(tf.Variable(init_de, name='decoder'), dim=[1,2], name='normilized_dict')
     Xhat = tf.nn.conv2d(encoder.output2D, D, strides=[1, 1, 1, 1], padding='SAME')
 #
 # LOSS
 l_rec = tf.reduce_mean(tf.reduce_sum(tf.square(encoder.input2D - Xhat), [1, 2]))
 l_sparse = tf.reduce_mean(tf.reduce_sum(tf.abs(encoder.output), 1))  
-loss =  l_rec + 0.5 * l_sparse
+loss =  l_rec + l_sparse
 
 #######################################################
 # Add vars to summary
@@ -135,7 +150,9 @@ with tf.name_scope('encoder'):
                 variable_summaries(t)
 with tf.name_scope('decoder'):
     variable_summaries(D)
-tf.summary.histogram('sp_encode', encoder.output2D)
+with tf.name_scope('sparse_code'):
+    variable_summaries(encoder.output)
+
 tf.summary.scalar('l1_loss', l_sparse)
 tf.summary.scalar('l2recon_loss', l_rec)
 tf.summary.scalar('total_loss', loss)
@@ -150,25 +167,28 @@ decoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "decoder/")
 optimizer_en = tf.train.AdamOptimizer(0.001).minimize(loss, var_list=encoder_vars)
 optimizer_de = tf.train.AdamOptimizer(0.001).minimize(loss, var_list=decoder_vars)
 
-def nextbatch(X, Y, batch_size, run_once=False):
+def nextbatch(X, Y=None, batch_size=500, run_once=False):
     offset = 0
     data_len = X.shape[0]
+    batch_Y = None
+    batch_X = None
     while True:
         if offset + batch_size <= data_len:
             batch_X = X[offset: batch_size + offset]
-            batch_Y = Y[offset: batch_size + offset]
+            if Y is not None:
+                batch_Y = Y[offset: batch_size + offset]
             offset = offset + batch_size
         else:
             if run_once:
                 raise StopIteration()
-
             batch_X = np.concatenate((X[offset: data_len], X[:batch_size - (data_len - offset)]), axis=0)
-            batch_Y = np.concatenate((Y[offset: data_len], Y[:batch_size - (data_len - offset)]), axis=0)
+            if Y is not None:
+                batch_Y = np.concatenate((Y[offset: data_len], Y[:batch_size - (data_len - offset)]), axis=0)
             offset = batch_size - (data_len - offset)
         yield batch_X, batch_Y
 
 print('batch size {}'.format(args.batch_size))
-test_batch = nextbatch(X_test, Y_test, 500, run_once=True)
+test_batch = nextbatch(X=X_test, Y=None, batch_size=500, run_once=True)
 
 ###################################################################
 #                Training   +   Results
@@ -177,7 +197,7 @@ def all_zero(datum, tensor):
     return np.count_nonzero(tensor) == 0
 
 train_loss = []
-validation_loss = []
+validation_loss = []        
 valid_sparsity_out = []
 valid_sparsity_in = []
 epoch_loss = 0
@@ -197,39 +217,42 @@ with tf.Session() as sess:
 
     for epoch in range(1, args.num_epochs + 1):
         epoch_loss = 0
-        train_batch = nextbatch(X_train, Y_train, args.batch_size, run_once=True)
+        train_batch = nextbatch(X=X_train, Y=None, batch_size=args.batch_size, run_once=True)
         b_num = 0
         for X_batch, _  in train_batch:
             b_num += 1
             _, iter_loss = sess.run([optimizer_en, loss], {encoder.input: X_batch})
-            if epoch  > 0:
+            if epoch  > 1:
                 _, iter_loss  = sess.run([optimizer_de, loss], {encoder.input: X_batch})
 
             train_loss.append(iter_loss)
 
             epoch_loss += iter_loss
-            if b_num % 50 == 0:
+            if  b_num % 50 == 0:
                 summary, _, _ = sess.run([merged, optimizer_en, optimizer_de], {encoder.input: X_batch})
                 train_summ_writer.add_summary(summary, epoch * X_train.shape[0] + b_num )
 
             if b_num % 200 == 0:
                 print('cross validation')
-                vaild_batch = nextbatch(X_valid, Y_valid, 500, run_once=True)
+                vaild_batch = nextbatch(X=X_valid, run_once=True)
                 valid_loss = 0
                 v_itr = 0
                 sp_in_itr = 0
                 sp_out_itr = 0
+                l1 = 0
                 for X_batch, _ in vaild_batch:
                     v_itr += 1
-                    iter_loss, enc_out = sess.run([loss, encoder.output], {encoder.input: X_batch})
-                    sp_out_itr += np.count_nonzero(enc_out)/500
-                    sp_in_itr += np.count_nonzero(X_batch)/500
+                    iter_loss, iter_l1, enc_out = sess.run([loss, l_sparse, encoder.output], {encoder.input: X_batch})
+                    sp_out_itr += np.count_nonzero(enc_out)/enc_out.shape[0]
+                    sp_in_itr += np.count_nonzero(X_batch)/X_batch.shape[0]
                     valid_loss += iter_loss
+                    l1 += iter_l1
                 valid_loss /= v_itr
+                l1 /= v_itr
                 validation_loss.append(valid_loss)
                 valid_sparsity_out.append(sp_out_itr/v_itr)
                 valid_sparsity_in.append(sp_in_itr/v_itr)
-                print('valid loss: %f encoded sparsity: %f' % (valid_loss, valid_sparsity_out[-1]))
+                print('valid loss: %f l1 loss: %f encoded sparsity: %f' % (valid_loss, l1, valid_sparsity_out[-1]))
         print('epoch %d: loss val:%f' % (epoch, args.batch_size  * epoch_loss / X_train.shape[0]))
 
     test_iter = 0
@@ -249,19 +272,25 @@ with tf.Session() as sess:
         np.savez(output + 'decoder', D=D.eval())
 
     # plot example image
-    i = np.random.randint(X_test.shape[0], size=1)
-    im = X_test[i, :]
-    Z, im_hat = sess.run([encoder.output2D, Xhat], {encoder.input: im})
-    example_ims = DIR_PATH + 'logdir/data/example_im'
-    np.savez(example_ims, IM=np.reshape(im, (28, 28)), Z=Z, IM_hat=np.reshape(im_hat, (28, 28)))
-    print('saved example img data de/en at %s' % example_ims)
+    for ex_i in range(5):
+        i = np.random.randint(X_test.shape[0], size=1)
+        im = X_test[i, :]
+        noisy_im = im +  np.random.normal(0, 0.1, input_shape[1] * input_shape[2])
+        Z, im_hat = sess.run([encoder.output2D, Xhat], {encoder.input: noisy_im})
+        example_ims = DIR_PATH + 'logdir/data/example_im' + str(ex_i)
+        np.savez(example_ims, IM=np.reshape(im, (input_shape[1], input_shape[2])),
+                                                 NIM=np.reshape(noisy_im, (input_shape[1], input_shape[2])),
+                                                 Z=Z, IM_hat=np.reshape(im_hat, (28, 28)))
+
+        print('saved example img data de/en at %s' % example_ims)
+
 
     plt.figure()
     plt.subplot(211)
-    plt.imshow(np.reshape(im, (28, 28)), cmap='gray')
+    plt.imshow(np.reshape(im, (input_shape[1], input_shape[2])), cmap='gray')
     plt.title('original image')
     plt.subplot(212)
-    plt.imshow(np.reshape(im_hat, (28, 28)), cmap='gray')
+    plt.imshow(np.reshape(im_hat, (input_shape[1], input_shape[2])), cmap='gray')
     plt.title('reconstructed image')
     example_ims = DIR_PATH + 'logdir/plots/example_im'
     plt.savefig(example_ims)

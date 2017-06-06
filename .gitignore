@@ -7,6 +7,7 @@
 *.png
 *.npz
 code/approx_sparse_coding/mnist_data/test.npz
+/Utils/data/
 mnist_data/train_sc.npz
 mnist_data/test_sc.npz
 **/.vscode/*
