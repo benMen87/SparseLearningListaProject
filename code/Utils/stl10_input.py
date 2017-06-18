@@ -151,7 +151,7 @@ def load_data(grayscale=False, unlabel_count=-1):
         test_images = rgb2gray(test_images)
         unlabel_images = rgb2gray(unlabel_images)
 
-    return (train_images, train_labels), (train_images, test_labels), unlabel_images
+    return (train_images, train_labels), (test_images, test_labels), unlabel_images
 
 if __name__ == "__main__":
     # download data if needed
