@@ -42,11 +42,22 @@ class ApproxSC(object):
     def _shrinkge(self):
         if self._shrinkge_type == 'soft thresh':
             return self._soft_thrsh
+        elif self._shrinkge_type == 'smooth soft thresh':
+            return self._smooth_soft_thrsh
         else:
             raise NotImplementedError('Double Tanh not implemented')
 
-    def _soft_thrsh(self, B, theta, name=''):
-        return tf.subtract(tf.nn.relu(B-theta), tf.nn.relu(-B-theta), name=name)
+    def _smooth_soft_thrsh(self, X, beta_b_tup, name=''):
+        """
+        beta controls the smoothness of the kink of shrinkage operator,
+        and b controls the location of the kink
+        """
+        beta, b = beta_b_tup 
+        def smooth_relu(input): return (1 / beta) * tf.log(tf.exp(beta * b) + tf.exp(beta * input) - 1) - b
+        return smooth_relu(X) - smooth_relu(-X) 
+
+    def _soft_thrsh(self, X, theta, name=''):
+        return tf.subtract(tf.nn.relu(X-theta), tf.nn.relu(-X-theta), name=name)
 
     def _double_tanh(self, B):
         raise NotImplementedError('Double Tanh not implemented')
