@@ -1,8 +1,8 @@
 import os
 import sys
+import numpy as np
 import tensorflow as tf
 import argparse
-import numpy as np
 from tensorflow.python import debug as tf_debug
 from keras.datasets import mnist, cifar10
 from keras.utils import np_utils
@@ -54,8 +54,7 @@ def rgb2gray(X):
 if args.dataset == 'mnist':
     (X_train, _), (X_test, _) = mnist.load_data()
 elif args.dataset == 'stl10':  # Data set with unlabeld too large cant loadfully to memory
-
-    (X_train, _), (X_test, _), X_unlabel = stl10_input.load_data(grayscale=True, unlabel_count=0)
+    (X_train, _), (X_test, _), X_unlabel = stl10_input.load_data(grayscale=True)
     if X_unlabel.shape[0] > 0:
         X_train = np.concatenate((X_train, X_unlabel), axis=0)
     np.random.shuffle(X_train)
@@ -125,8 +124,8 @@ if args.load_model:
     init_de = np.load(output + 'decoder')
 else:
     init_dict = {}
-    init_de = tf.truncated_normal([args.kernel_size, args.kernel_size,
-                                   args.kernel_count, 1], stddev=1)
+    init_de = None
+
 with tf.variable_scope('encoder'):
     encoder = sparse_encoder.LISTAConvDict2d(We_shape=We_shape,
                                              unroll_count=args.unroll_count,
@@ -137,13 +136,13 @@ with tf.variable_scope('encoder'):
                                              init_params_dict=init_dict)
 encoder.build_model()
 with tf.variable_scope('decoder'):
-    D = tf.nn.l2_normalize(tf.Variable(encoder._Wd.initialized_value(),
-        name='decoder'), dim=[0,1], name='normilized_dict')
+    init_de = init_de if init_de is not None else encoder._Wd.initialized_value()
+    D = tf.nn.l2_normalize(tf.Variable(init_de, name='decoder'), dim=[0, 1], name='normilized_dict')
     Xhat = tf.nn.conv2d(encoder.output2D, D, strides=[1, 1, 1, 1], padding='SAME')
 #
 # LOSS
-l_rec = tf.reduce_mean(tf.reduce_sum(tf.square(encoder.input2D - Xhat), [1, 2]))
-l_sparse = tf.reduce_mean(tf.reduce_sum(tf.abs(encoder.output), 1)) 
+l_rec = tf.reduce_mean(tf.reduce_sum(tf.square(encoder.input2D - Xhat), [1, 2]), name='l2')
+l_sparse = tf.reduce_mean(tf.reduce_sum(tf.abs(encoder.output), 1), name='l1') 
 loss =  l_rec + args.sparse_factor * l_sparse
 
 #######################################################
@@ -231,16 +230,15 @@ with tf.Session() as sess:
 
     for epoch in range(1, args.num_epochs + 1):
         epoch_loss = 0
+	print('epoch number:%d', epoch)
         train_batch = nextbatch(X=X_train, Y=None, batch_size=args.batch_size, run_once=True)
         b_num = 0
         for X_batch, _  in train_batch:
             b_num += 1
-            _, iter_loss = sess.run([optimizer_en, loss], {encoder.input: X_batch})
+            _, iter_loss  = sess.run([optimizer_en, loss], {encoder.input: X_batch})
             if epoch  > 1:
                 _, iter_loss  = sess.run([optimizer_de, loss], {encoder.input: X_batch})
-
             train_loss.append(iter_loss)
-
             epoch_loss += iter_loss
             if b_num % 50 == 0:
                 valid_loss = 0
@@ -358,8 +356,8 @@ plt.figure()
 fid = 0
 decoder_filters = np.squeeze(decoder_filters)
 for f in decoder_filters.T:
-    plt.subplot(8, 8, fid+1)
-    plt.imshow(f.T, cmap='gray')
+    plt.subplot(10, 10, fid+1)
+    plt.imshow(f.T, interpolation='bilinear', cmap='gray')
     fid += 1
 plt.savefig(DIR_PATH + 'logdir/plots/filters.png')
 print('seved plot of dict filter atoms in {}'.format(DIR_PATH + 'logdir/plots/filters.png'))
