@@ -32,7 +32,7 @@ class LISTAConvDict2d (ApproxSC):
         if not init_params_dict and filter_arr is not None :
             self.kernel_size = filter_arr.shape[1]
             self.amount_of_kernals = filter_arr.shape[0]
-            self._theta = [tf.nn.relu(tf.Variable(tf.random_uniform(shape=[1, self.patch_dim,
+            self._theta = [tf.nn.relu(tf.Variable(tf.random_uniform(maxval=0.5, shape=[1, self.patch_dim,
                 self.patch_dim, self.amount_of_kernals])), name='theta'+str(u))
                            for u in range(unroll_count)]
             flipfilter_arr = np.array([np.flip(np.flip(f,0),1) for f in filter_arr])
@@ -57,9 +57,14 @@ class LISTAConvDict2d (ApproxSC):
             self.amount_of_kernals = kernel_count
             self.kernel_size = kernel_size
             #tf.fill([1, self.patch_dim, self.patch_dim, self.amount_of_kernals], 0.2)
-            self._theta = [tf.nn.relu(tf.Variable(tf.random_uniform(shape=[1, self.patch_dim,
-                self.patch_dim, self.amount_of_kernals])), name='theta'+str(u))
-                           for u in range(unroll_count)]
+            #TODO: NOtice i changes back to one thresh for all layers 
+            self._theta = [tf.nn.relu(tf.Variable(tf.random_uniform(shape=[1, self.patch_dim, self.patch_dim, self.amount_of_kernals])),
+                name='theta')] * unroll_count
+            # self._beta = [tf.nn.relu(tf.Variable(tf.fill([1,
+            #     self.amount_of_kernals], value=10.0)), name='beta'+str(u)) for u in range(unroll_count)]
+            # self._b = [tf.nn.relu(tf.Variable(tf.fill([1,
+            #     self.amount_of_kernals], value=1.0)), name='beta'+str(u)) for u in range(unroll_count)]
+ 
             init_We = tf.truncated_normal([self.kernel_size, self.kernel_size,
                                           self.input_channels, self.amount_of_kernals], stddev=0.05)
             init_Wd = tf.truncated_normal([self.kernel_size, self.kernel_size,

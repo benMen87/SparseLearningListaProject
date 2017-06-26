@@ -42,8 +42,16 @@ class ApproxSC(object):
     def _shrinkge(self):
         if self._shrinkge_type == 'soft thresh':
             return self._soft_thrsh
+        elif self._shrinkge_type == 'smooth_sth':
+            return self._smooth_soft_thrsh
         else:
             raise NotImplementedError('Double Tanh not implemented')
+
+    def _smooth_soft_thrsh(self, x, b,  beta, name=''):
+        """
+        b and beta control the shape and smoothness of the threshold function
+        """
+        return (1/beta) * tf.log(tf.exp(b * beta) + tf.exp(beta * x) - 1) -b
 
     def _soft_thrsh(self, B, theta, name=''):
         return tf.subtract(tf.nn.relu(B-theta), tf.nn.relu(-B-theta), name=name)
