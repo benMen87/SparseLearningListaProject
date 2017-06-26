@@ -142,14 +142,17 @@ def load_data(grayscale=False, unlabel_count=-1):
     
     train_images = read_all_images(TR_DATA_PATH)
     train_labels = read_labels(TR_LABEL_PATH)
-    unlabel_images = read_all_images(UNLB_DATA_PATH, unlabel_count)
+    unlabel_images = np.array([])
+    if unlabel_count != 0:
+        unlabel_images = read_all_images(UNLB_DATA_PATH, unlabel_count)
     test_images = read_all_images(TS_DATA_PATH)
     test_labels = read_labels(TS_LABEL_PATH)
 
     if grayscale:
         train_images = rgb2gray(train_images)
         test_images = rgb2gray(test_images)
-        unlabel_images = rgb2gray(unlabel_images)
+        if unlabel_images:
+            unlabel_images = rgb2gray(unlabel_images)
 
     return (train_images, train_labels), (test_images, test_labels), unlabel_images
 

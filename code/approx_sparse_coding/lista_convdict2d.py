@@ -32,9 +32,13 @@ class LISTAConvDict2d (ApproxSC):
         if not init_params_dict and filter_arr is not None :
             self.kernel_size = filter_arr.shape[1]
             self.amount_of_kernals = filter_arr.shape[0]
-            self._theta = [tf.nn.relu(tf.Variable(tf.random_uniform(maxval=0.5, shape=[1, self.patch_dim,
-                self.patch_dim, self.amount_of_kernals])), name='theta'+str(u))
-                           for u in range(unroll_count)]
+            if self._shrinkge_type == 'soft thresh':
+                self._theta = [tf.nn.relu(tf.Variable(tf.random_uniform(maxval=0.5, shape=[1, self.patch_dim,
+                    self.patch_dim, self.amount_of_kernals])), name='theta'+str(u))
+                               for u in range(unroll_count)]
+            else:
+                raise NotImplemented('shirnkge type not supported')
+
             flipfilter_arr = np.array([np.flip(np.flip(f,0),1) for f in filter_arr])
             flipfilter_arr = np.expand_dims(flipfilter_arr, axis=-1)
             flipfilter_arr = np.transpose(flipfilter_arr, [1,2,3,0])
@@ -46,9 +50,14 @@ class LISTAConvDict2d (ApproxSC):
         elif init_params_dict:
             self.kernel_size = init_params_dict['Wd'].shape[1]
             self.amount_of_kernals = init_params_dict['Wd'].shape[2]
-            self._theta = [tf.Variable(init_params_dict['theta'][0], name='theta')]
-            self._theta += [tf.Variable(init_params_dict['theta'][-1], name='theta')
-                            for _ in range(1, unroll_count)]
+
+            if self._shrinkge_type == 'soft thresh':
+                self._theta = [tf.Variable(init_params_dict['theta'][0], name='theta')]
+                self._theta += [tf.Variable(init_params_dict['theta'][-1], name='theta')
+                                for _ in range(1, unroll_count)]
+            else:
+                raise NotImplemented('shirnkge type not supported')
+
             self._Wd = tf.Variable(init_params_dict['Wd'],
                                    name='Wd', dtype=tf.float32)
             self._We = tf.Variable(init_params_dict['We'],
@@ -57,14 +66,17 @@ class LISTAConvDict2d (ApproxSC):
             self.amount_of_kernals = kernel_count
             self.kernel_size = kernel_size
             #tf.fill([1, self.patch_dim, self.patch_dim, self.amount_of_kernals], 0.2)
-            #TODO: NOtice i changes back to one thresh for all layers 
-            self._theta = [tf.nn.relu(tf.Variable(tf.random_uniform(shape=[1, self.patch_dim, self.patch_dim, self.amount_of_kernals])),
-                name='theta')] * unroll_count
-            # self._beta = [tf.nn.relu(tf.Variable(tf.fill([1,
-            #     self.amount_of_kernals], value=10.0)), name='beta'+str(u)) for u in range(unroll_count)]
-            # self._b = [tf.nn.relu(tf.Variable(tf.fill([1,
-            #     self.amount_of_kernals], value=1.0)), name='beta'+str(u)) for u in range(unroll_count)]
- 
+            if self._shrinkge_type == 'soft thresh': 
+                #TODO: Notice thresh is now shared one for each feture map
+                self._theta = [tf.nn.relu(tf.Variable(tf.random_uniform(shape=[1, self.amount_of_kernals])),
+                                                                               name='theta')] * unroll_count
+            elif 'smooth soft thresh':
+                beta = [tf.Variable(tf.fill([1, self.amount_of_kernals], 10.0), name='beta'+str(u)) 
+                        for u in range(unroll_count)]
+                b = [tf.Variable(tf.fill([1, self.amount_of_kernals], 0.5), name='b'+str(u)) 
+                     for u in range(unroll_count)]
+                self._theta = zip(beta, b) # keep same interface
+
             init_We = tf.truncated_normal([self.kernel_size, self.kernel_size,
                                           self.input_channels, self.amount_of_kernals], stddev=0.05)
             init_Wd = tf.truncated_normal([self.kernel_size, self.kernel_size,

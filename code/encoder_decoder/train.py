@@ -19,21 +19,23 @@ from Utils import stl10_input
 
 parser = argparse.ArgumentParser(description='Sparse encoder decoder model')
 
-parser.add_argument('-b', '--batch_size', default=16,
+parser.add_argument('-b', '--batch_size', default=2,
                             type=int, help='size of train batches')
 parser.add_argument('-n', '--num_epochs', default=5, type=int,
                             help='number of epochs steps')
 parser.add_argument('-ks', '--kernel_size', default=5, type=int,
                             help='kernel size to be used in lista_conv')
-parser.add_argument('-kc', '--kernel_count', default=5, type=int,
+parser.add_argument('-kc', '--kernel_count', default=2, type=int,
                             help='amount of kernel to use in lista_conv')
-parser.add_argument('-u', '--unroll_count', default=2,
+parser.add_argument('-u', '--unroll_count', default=5,
                     type=int, help='Amount of Reccurent timesteps for decoder')
+parser.add_argument('--shirnkge_type', default='soft thresh',
+                        choices=['soft thresh', 'smooth soft thresh'])
 parser.add_argument('--save_model', dest='save_model', action='store_true')
 parser.add_argument('--load_model', dest='load_model', action='store_true')
 parser.add_argument('--debug', dest='debug', action='store_true')
 parser.add_argument('--name', default='lista_ed', type=str)
-parser.add_argument('--dataset', default='cifar10', choices=['mnist', 'stl10', 'cifar10'])
+parser.add_argument('--dataset', default='stl10', choices=['mnist', 'stl10', 'cifar10'])
 parser.add_argument('--sparse_factor', '-sf',  default=0.5, type=float)
 
 args = parser.parse_args()
@@ -52,8 +54,10 @@ def rgb2gray(X):
 if args.dataset == 'mnist':
     (X_train, _), (X_test, _) = mnist.load_data()
 elif args.dataset == 'stl10':  # Data set with unlabeld too large cant loadfully to memory
-    (X_train, _), (X_test, _), X_unlabel = stl10_input.load_data(grayscale=True, unlabel_count=5)
-    X_train = np.concatenate((X_train, X_unlabel), axis=0)
+
+    (X_train, _), (X_test, _), X_unlabel = stl10_input.load_data(grayscale=True, unlabel_count=0)
+    if X_unlabel.shape[0] > 0:
+        X_train = np.concatenate((X_train, X_unlabel), axis=0)
     np.random.shuffle(X_train)
     np.random.shuffle(X_test)
 elif args.dataset == 'cifar10':
@@ -84,8 +88,8 @@ X_test /= np.std(X_test, axis=1, keepdims=True)
 # Y_test = np_utils.to_categorical(y_test, 10)
 
 # split train set
-X_valid = X_train[:5000]
-X_train = X_train[5000:]
+X_valid = X_train[:1000]
+X_train = X_train[1000:]
 
 #######################################################
 #   Log-network for tensorboard
@@ -120,10 +124,6 @@ if args.load_model:
     init_dict = np.load(output + 'encoder')
     init_de = np.load(output + 'decoder')
 else:
-    filter_arr = np.array([np.random.randn(args.kernel_size, args.kernel_size)
-                  for _ in range(args.kernel_count)])
-    filter_arr = np.array([f/np.linalg.norm(f) for f in filter_arr])
-
     init_dict = {}
     init_de = tf.truncated_normal([args.kernel_size, args.kernel_size,
                                    args.kernel_count, 1], stddev=1)
@@ -132,6 +132,7 @@ with tf.variable_scope('encoder'):
                                              unroll_count=args.unroll_count,
                                              L=1, batch_size=args.batch_size,
                                              kernel_size=args.kernel_size,
+                                             shrinkge_type=args.shirnkge_type,
                                              kernel_count=args.kernel_count,
                                              init_params_dict=init_dict)
 encoder.build_model()
@@ -260,9 +261,11 @@ with tf.Session() as sess:
                 validation_loss.append(valid_loss)
                 valid_sparsity_out.append(sp_out_itr/v_itr)
                 valid_sparsity_in.append(sp_in_itr/v_itr)
-                print('valid loss: %f l1 loss: %f encoded sparsity: %f' % (valid_loss, l1, valid_sparsity_out[-1])) 
-        summary = sess.run(merged, {encoder.input: X_batch})
-        train_summ_writer.add_summary(summary, epoch)
+                print('valid loss: %f l1 loss: %f encoded sparsity: %f' %
+                      (valid_loss, l1, valid_sparsity_out[-1]))
+            if b_num % 50 == 0:
+                summary = sess.run(merged, {encoder.input: X_batch})
+                train_summ_writer.add_summary(summary, epoch)
 
         print('epoch %d: loss val:%f' % (epoch, args.batch_size  * epoch_loss / X_train.shape[0]))
 
