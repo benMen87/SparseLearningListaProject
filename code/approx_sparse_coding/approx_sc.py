@@ -49,10 +49,12 @@ class ApproxSC(object):
 
     def _smooth_soft_thrsh(self, X, theta, name=''):
         """
+        X  - Input
+        theta - tuple(beta, b)
         beta controls the smoothness of the kink of shrinkage operator,
         and b controls the location of the kink
         """
-        beta, b = beta_b_tup
+        beta, b = theta
         
         def smooth_relu(x, beta, b, name):
             first = beta * b * tf.ones_like(x)
@@ -61,7 +63,7 @@ class ApproxSC(object):
             # TODO: logsum exp works well for overflow but seems to cause underflow as well
             return tf.reduce_logsumexp([first, second, third], 0, name=name)
 
-        return smooth_relu(X, beta, b, name+'_right') - smooth_relu(X, beta, b, name+'_left')
+        return smooth_relu(X, beta, b, name+'_right') - smooth_relu(-X, beta, b, name+'_left')
  
 
     def _soft_thrsh(self, X, theta, name=''):
