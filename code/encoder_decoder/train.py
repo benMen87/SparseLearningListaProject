@@ -19,11 +19,7 @@ from Utils import stl10_input
 
 parser = argparse.ArgumentParser(description='Sparse encoder decoder model')
 
-<<<<<<< HEAD
-parser.add_argument('-b', '--batch_size', default=2,
-=======
 parser.add_argument('-b', '--batch_size', default=15,
->>>>>>> c8893f1af0b1b99eeaa5182e95113a17bcd94641
                             type=int, help='size of train batches')
 parser.add_argument('-n', '--num_epochs', default=5, type=int,
                             help='number of epochs steps')
@@ -35,10 +31,7 @@ parser.add_argument('-u', '--unroll_count', default=5,
                     type=int, help='Amount of Reccurent timesteps for decoder')
 parser.add_argument('--shirnkge_type', default='smooth soft thresh',
                         choices=['soft thresh', 'smooth soft thresh'])
-<<<<<<< HEAD
-=======
 parser.add_argument('--learning_rate', '-lr', default=0.001, type=float, help='learning rate')
->>>>>>> c8893f1af0b1b99eeaa5182e95113a17bcd94641
 parser.add_argument('--save_model', dest='save_model', action='store_true')
 parser.add_argument('--load_model', dest='load_model', action='store_true')
 parser.add_argument('--debug', dest='debug', action='store_true')
@@ -62,12 +55,7 @@ def rgb2gray(X):
 if args.dataset == 'mnist':
     (X_train, _), (X_test, _) = mnist.load_data()
 elif args.dataset == 'stl10':  # Data set with unlabeld too large cant loadfully to memory
-<<<<<<< HEAD
-
-    (X_train, _), (X_test, _), X_unlabel = stl10_input.load_data(grayscale=True, unlabel_count=0)
-=======
     (X_train, _), (X_test, _), X_unlabel = stl10_input.load_data(grayscale=True)
->>>>>>> c8893f1af0b1b99eeaa5182e95113a17bcd94641
     if X_unlabel.shape[0] > 0:
         X_train = np.concatenate((X_train, X_unlabel), axis=0)
     np.random.shuffle(X_train)
@@ -278,17 +266,19 @@ with tf.Session() as sess:
                 sp_in_itr = 0
                 sp_out_itr = 0
                 l1 = 0
-
+                l2 = 0
                 vaild_batch = nextbatch(X=X_valid[:100], batch_size=50, run_once=True)
                 for X_batch, _ in vaild_batch:
                     v_itr += 1
-                    iter_loss, iter_l1, enc_out = sess.run([loss, l_sparse, encoder.output], {encoder.input: X_batch})
+                    iter_loss, iter_l1, iter_l2, enc_out = sess.run([loss, l_sparse, l_rec, encoder.output], {encoder.input: X_batch})
                     sp_out_itr += np.count_nonzero(enc_out)/enc_out.shape[0]
                     sp_in_itr += np.count_nonzero(X_batch)/X_batch.shape[0]
                     valid_loss += iter_loss
                     l1 += iter_l1
+                    l2 += iter_l2
                 valid_loss /= v_itr
                 l1 /= v_itr
+                l2 /= v_itr
                 validation_loss.append(valid_loss)
                 valid_sparsity_out.append(sp_out_itr/v_itr)
                 valid_sparsity_in.append(sp_in_itr/v_itr)
@@ -297,8 +287,8 @@ with tf.Session() as sess:
                         f_name = MODEL_DIR + 'csc_u{}_'.format(args.unroll_count)
                         saver.save(sess, f_name, global_step=global_step_en)
                         print('saving model at: %s'%f_name) 
-                print('valid loss: %f l1 loss: %f encoded sparsity: %f' %
-                      (valid_loss, l1, valid_sparsity_out[-1]))
+                print('valid loss: %f l2 loss: %f l1 loss: %f encoded sparsity: %f' %
+                      (valid_loss, l2,  l1, valid_sparsity_out[-1]))
             if b_num % 50 == 0:
                 summary = sess.run(merged, {encoder.input: X_batch})
                 train_summ_writer.add_summary(summary, epoch)
