@@ -1,18 +1,21 @@
-import os
+"""
+This module contanint Class LISTAConvDict2d
+That an TF model for approximation CSC
+"""
 import sys
 import tensorflow as tf
 import numpy as np
-from approx_sc import ApproxSC
+from approx_sparse_coding.approx_sc import ApproxSC
 
 
-class LISTAConvDict2d (ApproxSC):
+class LISTAConvDict2d(ApproxSC):
     """Class of approximate SC based on 2D convolutinal dictioary.
        x = sum(f_l*Z_l) = (circ(f_0)|circ(f_1)|...|circ(f_n))[Z_0|..|Z_n]
        -> Wd = (circ(f_0)|circ(f_1)|...|circ(f_n)) or 1 filter with depth of n
        -> We = (circ(f_0)|circ(f_1)|...|circ(f_n))^T or n fiters with depth of 1
     """
 
-    def __init__(self, We_shape, unroll_count, L, 
+    def __init__(self, We_shape, unroll_count, L,
                  filter_arr=None, batch_size=1, kernel_count=1, kernel_size=3,
                  shared_threshold=False, shrinkge_type='soft thresh',
                  init_params_dict={}):
@@ -32,13 +35,12 @@ class LISTAConvDict2d (ApproxSC):
         if not init_params_dict and filter_arr is not None :
             self.kernel_size = filter_arr.shape[1]
             self.amount_of_kernals = filter_arr.shape[0]
-
             if self._shrinkge_type == 'soft thresh':
                 self._theta = [tf.nn.relu(tf.Variable(tf.random_uniform(maxval=0.5, shape=[1, self.patch_dim,
                     self.patch_dim, self.amount_of_kernals])), name='theta'+str(u))
                                for u in range(unroll_count)]
             else:
-                raise NotImplemented('shirnkge type not supported')
+                raise NotImplementedError('shirnkge type not supported')
 
             flipfilter_arr = np.array([np.flip(np.flip(f,0),1) for f in filter_arr])
             flipfilter_arr = np.expand_dims(flipfilter_arr, axis=-1)
@@ -57,7 +59,7 @@ class LISTAConvDict2d (ApproxSC):
                 self._theta += [tf.Variable(init_params_dict['theta'][-1], name='theta')
                                 for _ in range(1, unroll_count)]
             else:
-                raise NotImplemented('shirnkge type not supported')
+                raise NotImplementedError('shirnkge type not supported')
 
             self._Wd = tf.Variable(init_params_dict['Wd'],
                                    name='Wd', dtype=tf.float32)
@@ -67,22 +69,23 @@ class LISTAConvDict2d (ApproxSC):
             self.amount_of_kernals = kernel_count
             self.kernel_size = kernel_size
             #tf.fill([1, self.patch_dim, self.patch_dim, self.amount_of_kernals], 0.2)
+
             if self._shrinkge_type == 'soft thresh':
-                self._theta = [tf.nn.relu(tf.Variable(tf.random_uniform(shape=[1, self.patch_dim,
-                    self.patch_dim, self.amount_of_kernals])), name='theta'+str(u))
-                               for u in range(unroll_count)]
-            elif 'smooth soft thresh':
-                beta = [tf.Variable(tf.fill([1, self.amount_of_kernals], 10.0), name='beta'+str(u))
+                #TODO: Notice thresh is now shared one for each feture map
+                self._theta = [tf.nn.relu(tf.Variable(tf.random_uniform(shape=[1, self.amount_of_kernals])),
+                                          name='theta')] * unroll_count
+            elif self._shrinkge_type == 'smooth soft thresh':
+                
+                beta = [tf.Variable(tf.fill([1, self.amount_of_kernals], 5.0), name='beta'+str(u))
                               for u in range(unroll_count)]
                 b = [tf.Variable(tf.fill([1, self.amount_of_kernals], 0.5), name='b'+str(u)) 
                            for u in range(unroll_count)]
                 self._theta = zip(beta, b)
-            init_We = tf.truncated_normal([self.kernel_size, self.kernel_size,
-                                          self.input_channels, self.amount_of_kernals], stddev=0.05)
-            init_Wd = tf.truncated_normal([self.kernel_size, self.kernel_size,
-                                           self.amount_of_kernals, self.input_channels], stddev=0.05)
-            self._We = tf.Variable(init_We, name='We')
-            self._Wd = tf.Variable(init_Wd, name='Wd')
+
+            init_We = tf.nn.l2_normalize(tf.truncated_normal([self.kernel_size, self.kernel_size,
+                                          self.input_channels, self.amount_of_kernals]), dim=[0,1])
+            self._We = tf.Variable(0.1 * init_We, name='We')
+            self._Wd = tf.Variable(tf.transpose(tf.reverse(self._We.initialized_value(), [0,1]), [0,1,3,2]), name='We')
 
     def build_model(self):
         shrinkge_fn = self._shrinkge()
@@ -90,21 +93,20 @@ class LISTAConvDict2d (ApproxSC):
         B = tf.nn.conv2d(tf.reshape(self._X, [-1, self.patch_dim, self.patch_dim, 1]),
                          self._We, strides=[1, 1, 1, 1],
                          padding='SAME', name='bias')
-        self._Z = shrinkge_fn(B, self._theta[0], 'Z0')
+        self._Z.append(shrinkge_fn(B, self._theta[0], 'Z0'))
         #
         # run unrolling
         for t in range(1, self._unroll_count):
-            conv_wd = tf.nn.conv2d(self._Z, self._Wd,
+            conv_wd = tf.nn.conv2d(self._Z[-1], self._Wd,
                                    strides=[1, 1, 1, 1],
                                    padding='SAME', name='convWd')
 
             conv_we = tf.nn.conv2d(conv_wd, self._We,
                                    strides=[1, 1, 1, 1],
                                    padding='SAME', name='convWe')
-            res = self._Z - conv_we
+            res = self._Z[-1] - conv_we
             res_add_bias = res + B
-
-            self._Z = shrinkge_fn(res_add_bias, self._theta[t], 'Z'+str(t))
+            self._Z.append(shrinkge_fn(res_add_bias, self._theta[t], 'Z'+str(t)))
 
     @property
     def loss(self):
@@ -126,8 +128,11 @@ class LISTAConvDict2d (ApproxSC):
         return self._Wd
 
     @property
-    def output2D(self):
-        return self._Z
+    def output2d(self):
+        """
+        returns array of 2d feature maps
+        """
+        return self._Z[-1]
 
     @property
     def input2D(self):
@@ -135,12 +140,8 @@ class LISTAConvDict2d (ApproxSC):
 
     @property
     def output(self):
-        return tf.reshape(tf.transpose(self._Z, [0, 3, 1, 2]),
+        return tf.reshape(tf.transpose(self._Z[-1], [0, 3, 1, 2]),
                           [-1, self.input_size * self.amount_of_kernals])
-
-    @property
-    def output2D(self):
-        return self._Z
 
     @property
     def batch_size(self):

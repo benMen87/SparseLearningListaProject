@@ -151,7 +151,7 @@ def load_data(grayscale=False, unlabel_count=-1):
     if grayscale:
         train_images = rgb2gray(train_images)
         test_images = rgb2gray(test_images)
-        if unlabel_images:
+        if unlabel_count != 0:
             unlabel_images = rgb2gray(unlabel_images)
 
     return (train_images, train_labels), (test_images, test_labels), unlabel_images

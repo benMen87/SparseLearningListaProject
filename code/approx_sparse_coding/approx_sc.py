@@ -47,19 +47,29 @@ class ApproxSC(object):
         else:
             raise NotImplementedError('Double Tanh not implemented')
 
-    def _smooth_soft_thrsh(self, X, beta_b_tup, name=''):
+    def _smooth_soft_thrsh(self, X, theta, name=''):
         """
+        X  - Input
+        theta - tuple(beta, b)
         beta controls the smoothness of the kink of shrinkage operator,
         and b controls the location of the kink
         """
-        beta, b = beta_b_tup 
-        def smooth_relu(input): return (1 / beta) * tf.log(tf.exp(beta * b) + tf.exp(beta * input) - 1) - b
-        return smooth_relu(X) - smooth_relu(-X) 
+        beta, b = theta
+        
+        def smooth_relu(x, beta, b, name):
+            first = beta * b * tf.ones_like(x)
+            second = beta * x
+            third = tf.zeros_like(x)
+            # TODO: logsum exp works well for overflow but seems to cause underflow as well
+            return (1/beta)*tf.reduce_logsumexp([first, second, third], 0, name=name) - b
+
+        return smooth_relu(X, beta, b, name+'_right') - smooth_relu(-X, beta, b, name+'_left')
+ 
 
     def _soft_thrsh(self, X, theta, name=''):
         return tf.subtract(tf.nn.relu(X-theta), tf.nn.relu(-X-theta), name=name)
 
-    def _double_tanh(self, B):
+    def _double_tanh(self, X):
         raise NotImplementedError('Double Tanh not implemented')
 
     @property
@@ -67,12 +77,15 @@ class ApproxSC(object):
         """ A 0-D float32 Tensor.
             function is used as a limited setter and a getter...
         """
-        assert('Abstract class define child loss')
+        assert 'Abstract class define child loss'
 
     @property
     def output(self):
+        """
+        return output Z
+        """
         if self._Z is None:
-            assert('Abstract class define child Z') 
+            assert('Abstract class define child Z')
         return self._Z
 
     @property
