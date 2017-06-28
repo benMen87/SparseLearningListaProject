@@ -19,7 +19,7 @@ from Utils import stl10_input
 
 parser = argparse.ArgumentParser(description='Sparse encoder decoder model')
 
-parser.add_argument('-b', '--batch_size', default=2,
+parser.add_argument('-b', '--batch_size', default=15,
                             type=int, help='size of train batches')
 parser.add_argument('-n', '--num_epochs', default=5, type=int,
                             help='number of epochs steps')
@@ -29,8 +29,9 @@ parser.add_argument('-kc', '--kernel_count', default=2, type=int,
                             help='amount of kernel to use in lista_conv')
 parser.add_argument('-u', '--unroll_count', default=5,
                     type=int, help='Amount of Reccurent timesteps for decoder')
-parser.add_argument('--shirnkge_type', default='soft thresh',
+parser.add_argument('--shirnkge_type', default='smooth soft thresh',
                         choices=['soft thresh', 'smooth soft thresh'])
+parser.add_argument('--learning_rate', '-lr', default=0.001, type=float, help='learning rate')
 parser.add_argument('--save_model', dest='save_model', action='store_true')
 parser.add_argument('--load_model', dest='load_model', action='store_true')
 parser.add_argument('--debug', dest='debug', action='store_true')
@@ -117,14 +118,14 @@ in_encoder_shape = input_shape[1] * input_shape[2]
 out_encoder_shape = args.kernel_count * in_encoder_shape
 We_shape = (out_encoder_shape, in_encoder_shape)
 
-output = DIR_PATH + 'logdir/data/'
-if args.load_model:
-    print('loading model from %s' % output)
-    init_dict = np.load(output + 'encoder')
-    init_de = np.load(output + 'decoder')
-else:
-    init_dict = {}
-    init_de = None
+# output = DIR_PATH + 'logdir/data/'
+# if args.load_model:
+#     print('loading model from %s' % output)
+#     init_dict = np.load(output + 'encoder')
+#     init_de = np.load(output + 'decoder')
+# else:
+init_dict = {}
+init_de = None
 
 with tf.variable_scope('encoder'):
     encoder = sparse_encoder.LISTAConvDict2d(We_shape=We_shape,
@@ -138,7 +139,7 @@ encoder.build_model()
 with tf.variable_scope('decoder'):
     init_de = init_de if init_de is not None else encoder._Wd.initialized_value()
     D = tf.nn.l2_normalize(tf.Variable(init_de, name='decoder'), dim=[0, 1], name='normilized_dict')
-    Xhat = tf.nn.conv2d(encoder.output2D, D, strides=[1, 1, 1, 1], padding='SAME')
+    Xhat = tf.nn.conv2d(encoder.output2d, D, strides=[1, 1, 1, 1], padding='SAME')
 #
 # LOSS
 l_rec = tf.reduce_mean(tf.reduce_sum(tf.square(encoder.input2D - Xhat), [1, 2]), name='l2')
@@ -173,12 +174,23 @@ tf.summary.image('input', encoder.input2D, max_outputs=3)
 tf.summary.image('output', Xhat, max_outputs=3)
 
 #######################################################
+# Saver
+#######################################################
+if args.save_model or args.load_model:
+    MODEL_DIR = DIR_PATH + '/logdir/models/' + args.name + '/'
+    saver = tf.train.Saver(max_to_keep=1)
+    if not os.path.isdir(MODEL_DIR):
+        os.mkdir(MODEL_DIR)
+
+#######################################################
 #   Training Vars - optimizers and batch generators
 #######################################################
+global_step_en = tf.Variable(0, dtype=tf.int32, trainable=False, name='global_step_en')
+global_step_de = tf.Variable(0, dtype=tf.int32, trainable=False, name='global_step_de')
 encoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "encoder/")
 decoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "decoder/")
-optimizer_en = tf.train.AdamOptimizer(0.001).minimize(loss, var_list=encoder_vars)
-optimizer_de = tf.train.AdamOptimizer(0.001).minimize(loss, var_list=decoder_vars)
+optimizer_en = tf.train.AdamOptimizer(args.learning_rate).minimize(loss, var_list=encoder_vars, global_step=global_step_en)
+optimizer_de = tf.train.AdamOptimizer(args.learning_rate).minimize(loss, var_list=decoder_vars, global_step=global_step_de)
 
 def nextbatch(X, Y=None, batch_size=500, run_once=False):
     offset = 0
@@ -217,11 +229,18 @@ epoch_loss = 0
 test_loss = 0
 with tf.Session() as sess:
 
+    tf.global_variables_initializer().run(session=sess)
+    print('Initialized')
+
     merged = tf.summary.merge_all()
     train_summ_writer = tf.summary.FileWriter(tensorboard_path + args.name)
     train_summ_writer.add_graph(sess.graph)
-    tf.global_variables_initializer().run(session=sess)
-    print('Initialized')
+    if args.load_model:
+        if os.listdir(MODEL_DIR):
+            print('loading model')
+            saver.restore(sess, tf.train.latest_checkpoint(MODEL_DIR))
+        else:
+            print('no cpk to load running with random init')
 
     if args.debug:
         sess = tf_debug.LocalCLIDebugWrapperSession(sess)
@@ -230,7 +249,8 @@ with tf.Session() as sess:
 
     for epoch in range(1, args.num_epochs + 1):
         epoch_loss = 0
-	print('epoch number:%d', epoch)
+        print('epoch number:%d', epoch)
+
         train_batch = nextbatch(X=X_train, Y=None, batch_size=args.batch_size, run_once=True)
         b_num = 0
         for X_batch, _  in train_batch:
@@ -240,13 +260,14 @@ with tf.Session() as sess:
                 _, iter_loss  = sess.run([optimizer_de, loss], {encoder.input: X_batch})
             train_loss.append(iter_loss)
             epoch_loss += iter_loss
-            if b_num % 50 == 0:
+            if b_num % 100 == 0:
                 valid_loss = 0
                 v_itr = 0
                 sp_in_itr = 0
                 sp_out_itr = 0
                 l1 = 0
-                vaild_batch = nextbatch(X=X_valid[:50], batch_size=50, run_once=True)
+
+                vaild_batch = nextbatch(X=X_valid[:100], batch_size=50, run_once=True)
                 for X_batch, _ in vaild_batch:
                     v_itr += 1
                     iter_loss, iter_l1, enc_out = sess.run([loss, l_sparse, encoder.output], {encoder.input: X_batch})
@@ -259,6 +280,11 @@ with tf.Session() as sess:
                 validation_loss.append(valid_loss)
                 valid_sparsity_out.append(sp_out_itr/v_itr)
                 valid_sparsity_in.append(sp_in_itr/v_itr)
+                if args.save_model:
+                    if valid_loss <= np.min(validation_loss):
+                        f_name = MODEL_DIR + 'csc_u{}_'.format(args.unroll_count)
+                        saver.save(sess, f_name, global_step=global_step_en)
+                        print('saving model at: %s'%f_name) 
                 print('valid loss: %f l1 loss: %f encoded sparsity: %f' %
                       (valid_loss, l1, valid_sparsity_out[-1]))
             if b_num % 50 == 0:
@@ -274,22 +300,13 @@ with tf.Session() as sess:
     print('='*40)
     print('test loss: %f' % (test_loss/test_iter))
 
-    if args.save_model:
-        output = DIR_PATH + 'logdir/data/'
-        print('saving model to %s' % output)
-        We = encoder.We.eval()
-        theta = sess.run(encoder._theta)
-        Wd = encoder.Wd.eval()
-        np.savez(output + 'encoder', We=We, theta=theta, Wd=Wd)
-        np.savez(output + 'decoder', D=D.eval())
-
     # plot example image
     for ex_i in range(5):
         i = np.random.randint(X_test.shape[0], size=1)
         im = X_test[i, :]
         im_n = im +  np.random.normal(0, 0.1, input_shape[1] * input_shape[2])
-        Z_n, im_hat_n = sess.run([encoder.output2D, Xhat], {encoder.input: im_n})
-        Z, im_hat = sess.run([encoder.output2D, Xhat], {encoder.input: im})
+        Z_n, im_hat_n = sess.run([encoder.output2d, Xhat], {encoder.input: im_n})
+        Z, im_hat = sess.run([encoder.output2d, Xhat], {encoder.input: im})
 
         im.shape = (input_shape[1], input_shape[2])
         im_n.shape = (input_shape[1], input_shape[2])
@@ -356,7 +373,7 @@ plt.figure()
 fid = 0
 decoder_filters = np.squeeze(decoder_filters)
 for f in decoder_filters.T:
-    plt.subplot(10, 10, fid+1)
+    plt.subplot(8, 8, fid+1)
     plt.imshow(f.T, interpolation='bilinear', cmap='gray')
     fid += 1
 plt.savefig(DIR_PATH + 'logdir/plots/filters.png')

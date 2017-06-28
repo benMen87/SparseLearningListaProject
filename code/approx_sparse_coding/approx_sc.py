@@ -61,7 +61,7 @@ class ApproxSC(object):
             second = beta * x
             third = tf.zeros_like(x)
             # TODO: logsum exp works well for overflow but seems to cause underflow as well
-            return tf.reduce_logsumexp([first, second, third], 0, name=name)
+            return (1/beta)*tf.reduce_logsumexp([first, second, third], 0, name=name) - b
 
         return smooth_relu(X, beta, b, name+'_right') - smooth_relu(-X, beta, b, name+'_left')
  
