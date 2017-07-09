@@ -126,6 +126,7 @@ We_shape = (out_encoder_shape, in_encoder_shape)
 # else:
 init_dict = {}
 init_de = None
+mdl_i = args.unroll_count // 2
 
 with tf.variable_scope('encoder'):
     encoder = sparse_encoder.LISTAConvDict2d(We_shape=We_shape,
@@ -140,11 +141,13 @@ with tf.variable_scope('decoder'):
     init_de = init_de if init_de is not None else encoder._Wd.initialized_value()
     D = tf.nn.l2_normalize(tf.Variable(init_de, name='decoder'), dim=[0, 1], name='normilized_dict')
     Xhat = tf.nn.conv2d(encoder.output2d, D, strides=[1, 1, 1, 1], padding='SAME')
+    Xhat_i = tf.nn.conv2d(encoder.output2d_i(mdl_i), D, strides=[1, 1, 1, 1], padding='SAME')
 #
 # LOSS
 l_rec = tf.reduce_mean(tf.reduce_sum(tf.square(encoder.input2D - Xhat), [1, 2]), name='l2')
+l_rec_i = tf.reduce_mean(tf.reduce_sum(tf.square(encoder.input2D - Xhat_i), [1, 2]), name='l2')
 l_sparse = tf.reduce_mean(tf.reduce_sum(tf.abs(encoder.output), 1), name='l1') 
-loss =  l_rec + args.sparse_factor * l_sparse
+loss =  l_rec + args.sparse_factor * l_sparse + 0.0001 * l_rec_i
 
 #######################################################
 # Add vars to summary
@@ -190,7 +193,11 @@ global_step_de = tf.Variable(0, dtype=tf.int32, trainable=False, name='global_st
 encoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "encoder/")
 decoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "decoder/")
 optimizer_en = tf.train.AdamOptimizer(args.learning_rate).minimize(loss, var_list=encoder_vars, global_step=global_step_en)
-optimizer_de = tf.train.AdamOptimizer(args.learning_rate).minimize(loss, var_list=decoder_vars, global_step=global_step_de)
+optimizer_de = tf.train.AdamOptimizer(1.5 * args.learning_rate).minimize(loss, var_list=decoder_vars, global_step=global_step_de)
+
+# optimizer_en = YFOptimizer(clip_thresh=1).minimize(loss, var_list=encoder_vars, global_step=global_step_en)
+# optimizer_de = YFOptimizer().minimize(loss, var_list=decoder_vars, global_step=global_step_de)
+
 
 def nextbatch(X, Y=None, batch_size=500, run_once=False):
     offset = 0
@@ -226,7 +233,6 @@ validation_loss = []
 valid_sparsity_out = []
 valid_sparsity_in = []
 epoch_loss = 0
-test_loss = 0
 with tf.Session() as sess:
 
     tf.global_variables_initializer().run(session=sess)
@@ -294,13 +300,15 @@ with tf.Session() as sess:
                 train_summ_writer.add_summary(summary, epoch)
 
         print('epoch %d: loss val:%f' % (epoch, args.batch_size  * epoch_loss / X_train.shape[0]))
-
+    test_loss = 0
+    l2_loss = 0
     test_iter = 0
     for X_batch, _ in test_batch:
         test_iter += 1
         test_loss += sess.run(loss, {encoder.input: X_batch})
+        l2_loss += sess.run(l_rec, {encoder.input: X_batch})
     print('='*40)
-    print('test loss: %f' % (test_loss/test_iter))
+    print('test loss: %f l2 loss: %f' % ((test_loss/test_iter), (l2_loss/test_iter)))
 
     # plot example image
     for ex_i in range(5):

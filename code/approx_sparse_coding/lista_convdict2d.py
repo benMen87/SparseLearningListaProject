@@ -134,6 +134,15 @@ class LISTAConvDict2d(ApproxSC):
         """
         return self._Z[-1]
 
+    def output2d_i(self, i):
+        """
+        return output Z
+        """
+        _Z = self._Z[i]
+
+        return _Z
+
+
     @property
     def input2D(self):
         return tf.reshape(self._X, [-1, self.patch_dim, self.patch_dim, 1])
