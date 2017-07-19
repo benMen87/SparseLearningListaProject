@@ -36,7 +36,8 @@ class LISTAConvDict2d(ApproxSC):
             self.kernel_size = filter_arr.shape[1]
             self.amount_of_kernals = filter_arr.shape[0]
             if self._shrinkge_type == 'soft thresh':
-                self._theta = [tf.nn.relu(tf.Variable(tf.random_uniform(maxval=0.5, shape=[1, self.patch_dim,
+                self._theta = [
+                    tf.nn.relu(tf.Variable(tf.random_uniform(maxval=0.5, shape=[1, self.patch_dim,
                     self.patch_dim, self.amount_of_kernals])), name='theta'+str(u))
                                for u in range(unroll_count)]
             else:
@@ -55,9 +56,11 @@ class LISTAConvDict2d(ApproxSC):
             self.amount_of_kernals = init_params_dict['Wd'].shape[2]
 
             if self._shrinkge_type == 'soft thresh':
-                self._theta = [tf.Variable(init_params_dict['theta'][0], name='theta')]
-                self._theta += [tf.Variable(init_params_dict['theta'][-1], name='theta')
-                                for _ in range(1, unroll_count)]
+                self._theta = [tf.nn.relu(tf.Variable(tf.fill([1, self.amount_of_kernals], value=0.3)),
+                                          name='theta')] * unroll_count
+                # self._theta = [tf.Variable(init_params_dict['theta'][0], name='theta')]
+                # self._theta += [tf.Variable(init_params_dict['theta'][-1], name='theta')
+                #                 for _ in range(1, unroll_count)]
             else:
                 raise NotImplementedError('shirnkge type not supported')
 
@@ -72,7 +75,7 @@ class LISTAConvDict2d(ApproxSC):
 
             if self._shrinkge_type == 'soft thresh':
                 #TODO: Notice thresh is now shared one for each feture map
-                self._theta = [tf.nn.relu(tf.Variable(tf.random_uniform(shape=[1, self.amount_of_kernals])),
+                self._theta = [tf.nn.relu(tf.Variable(tf.random_uniform(shape=[0.5, self.amount_of_kernals])),
                                           name='theta')] * unroll_count
             elif self._shrinkge_type == 'smooth soft thresh':
                 
