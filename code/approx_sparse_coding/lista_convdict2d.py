@@ -25,8 +25,9 @@ class LISTAConvDict2d(ApproxSC):
             unroll_size: Amount of times to repeat lcod block.
         """
 
-        super(LISTAConvDict2d, self).__init__(We_shape, unroll_count,
-                                              shrinkge_type, shared_threshold, batch_size)
+        super(LISTAConvDict2d, self).__init__(We_shape, unroll_count, input2d=True,
+                                              shrinkge_type=shrinkge_type, shared_threshold=shared_threshold,
+                                              batch_size=batch_size)
 
         self.input_channels = 1  # TODO: add support for RGB?
         self.patch_dim = np.int(np.sqrt(self.input_size))
@@ -75,7 +76,7 @@ class LISTAConvDict2d(ApproxSC):
 
             if self._shrinkge_type == 'soft thresh':
                 #TODO: Notice thresh is now shared one for each feture map
-                self._theta = [tf.nn.relu(tf.Variable(tf.random_uniform(shape=[0.5, self.amount_of_kernals])),
+                self._theta = [tf.nn.relu(tf.Variable(tf.random_uniform(shape=[1, self.amount_of_kernals])),
                                           name='theta')] * unroll_count
             elif self._shrinkge_type == 'smooth soft thresh':
                 

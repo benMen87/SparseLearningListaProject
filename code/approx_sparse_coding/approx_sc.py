@@ -4,7 +4,7 @@ import numpy as np
 
 class ApproxSC(object):
     """description of class"""
-    def __init__(self, We_shape, unroll_count,
+    def __init__(self, We_shape, unroll_count, input2d = False,
                  shrinkge_type='soft thresh', shared_threshold=False, batch_size=1):
         """ Create a LCoD model.
 
@@ -21,8 +21,14 @@ class ApproxSC(object):
         # graph i/o
         b_dim = self.train_batch_size
         b_dim = None if b_dim > 1 else b_dim
-        self._X = tf.placeholder(tf.float32, shape=(b_dim, self.input_size),
-                                 name='X')
+        if input2d:
+            dim_size = np.int(np.sqrt(self.input_size))
+            self._X = tf.placeholder(tf.float32, shape=(b_dim, dim_size, dim_size, 1),
+                                     name='X')
+        else:
+            self._X = tf.placeholder(tf.float32, shape=(b_dim, self.input_size),
+                                     name='X')
+
         self._Zstar = tf.placeholder(tf.float32,
                                      shape=(b_dim, self.output_size),
                                      name='Zstar')
