@@ -36,7 +36,10 @@ parser.add_argument('--learning_rate', '-lr', default=0.001, type=float, help='l
 parser.add_argument('--save_model', dest='save_model', action='store_true')
 parser.add_argument('--load_model', dest='load_model', action='store_true')
 parser.add_argument('--debug', dest='debug', action='store_true')
-parser.add_argument('--name', default='lista_ed', type=str)
+parser.add_argument('--name', default='lista_ed', type=str, help='used for\
+        creating load/store log dir names')
+parser.add_argument('--load_name', default='', type=str, help='used to\
+        load from a model with "name" diffrent from this model name')
 parser.add_argument('--dataset', default='stl10', choices=['mnist', 'stl10', 'cifar10'])
 parser.add_argument('--sparse_factor', '-sf',  default=0.5, type=float)
 parser.add_argument('--middle_loss_factor', '-mf', default=0.1, type=float)
@@ -44,25 +47,39 @@ parser.add_argument('--load_pretrained_dict', action='store_true', help='inilize
 parser.add_argument('--dont_train_dict', '-dt', action='store_true',  help='how many epochs to wait train dict -1 means dont train')
 parser.add_argument('--test_fruits', action='store_true', help='test on fruit images for bechmark')
 parser.add_argument('--add_noise',  action='store_true', help='add noise to input')
+parser.add_argument('--inpaint',  action='store_true', help='add noise to input')
+parser.add_argument('--inpaint_keep_prob', '-p', type=float, default=0.5,
+        help='probilty to sample pixel')
 args = parser.parse_args()
+
+###########################################################
+#                  Pre-Proccess Data Sets 
+###########################################################
+def rgb2gray(X):
+    r, g, b = X[..., 0], X[...,1], X[...,2]
+    return (0.2125 * r) + (0.7154 * g) + (0.0721 * b)
+
+def add_noise(X, std):
+    noise = np.random.normal(0, std, X.shape)
+    return X + noise
+
+
+def preprocess_data(X, addnoise=False, noise_sigma=0, inpaint=False, keep_prob=0.5):
+    if addnoise:
+       X = add_noise(X, noise_sigma)
+    if inpaint:
+        X *= np.random.choice([0, 1], size=X.shape, p=[1 - keep_prob, keep_prob])
+    X = X.astype('float32')
+    X -= np.mean(X, axis=(1, 2), keepdims=True)
+    X /= np.std(X, axis=(1, 2), keepdims=True)
+    X = X[..., np.newaxis]
+    return X
 
 ###########################################################
 #                   Load Data Sets
 ###########################################################
 
 
-
-def rgb2gray(X):
-    r, g, b = X[..., 0], X[...,1], X[...,2]
-    return (0.2125 * r) + (0.7154 * g) + (0.0721 * b)
-
-def preprocess_data(X):
-    X = X.astype('float32')
-    X -= np.mean(X, axis=(1, 2), keepdims=True)
-    X /= np.std(X, axis=(1, 2), keepdims=True)
-    X = X[..., np.newaxis]
-    return X
-   
 
 #
 # load data
@@ -83,7 +100,6 @@ print("training size: {}, test size: {}".format(X_train.shape[0],
       X_test.shape[0]))
 
 input_shape = X_train.shape
-std_approx = np.mean(np.std(X_train, axis=(1, 2), keepdims=True))
 
 Y_train = np.empty(shape=X_train.shape)
 Y_test =  np.empty(shape=X_test.shape)
@@ -91,14 +107,15 @@ Y_train[:] = X_train[:]
 Y_test[:] = X_test[:]
 
 noise_sigma = 20
-if args.add_noise == 1:
-    X_train += np.random.normal(0, noise_sigma, X_train.shape)
-    X_test += np.random.normal(0, noise_sigma, X_test.shape)
+# if args.add_noise == 1:
+#     X_train = add_noise(X_train, noise_sigma)
+#     X_test = add_noise(X_test, noise_sigma)
 
-X_train = preprocess_data(X_train) 
+X_train = preprocess_data(X_train, args.add_noise, noise_sigma,
+        args.inpaint, args.inpaint_keep_prob)
 Y_train = preprocess_data(Y_train)
 
-X_test = preprocess_data(X_test) 
+X_test = preprocess_data(X_test, args.add_noise, noise_sigma, args.inpaint, args.inpaint_keep_prob)
 Y_test = preprocess_data(Y_test)
 
 
@@ -329,9 +346,13 @@ with tf.Session() as sess:
     train_summ_writer = tf.summary.FileWriter(tensorboard_path + args.name)
     train_summ_writer.add_graph(sess.graph)
     if args.load_model:
-        if os.listdir(MODEL_DIR):
+        if args.load_name != '':
+            LOAD_DIR = DIR_PATH + '/logdir/models/' + args.load_name + '/'
+        else:
+            LOAD_DIR = MODEL_DIR
+        if os.listdir(LOAD_DIR):
             print('loading model')
-            saver.restore(sess, tf.train.latest_checkpoint(MODEL_DIR))
+            saver.restore(sess, tf.train.latest_checkpoint(LOAD_DIR))
         else:
             print('no cpk to load running with random init')
 
@@ -413,9 +434,9 @@ with tf.Session() as sess:
         fruit_std = np.mean(np.std(X_fruit, axis=(1, 2), keepdims=True))
         Y_fruit = np.empty(shape=X_fruit.shape)
         Y_fruit[:] = X_fruit[:]
-        X_fruit += np.random.normal(0, noise_sigma, X_fruit.shape)
-        X_fruit = preprocess_data(X_fruit)
+        X_fruit = preprocess_data(X_fruit, args.add_noise, noise_sigma, args.inpaint, args.inpaint_keep_prob)
         Y_fruit = preprocess_data(Y_fruit)
+
         for i, (xfruit, yfruit)  in enumerate(zip(X_fruit, Y_fruit)):
             savetstfig(sess, encoder, decoder, xfruit[np.newaxis, :], yfruit[np.newaxis, :], 'fruit'+str(i))
 
