@@ -22,7 +22,7 @@ parser = argparse.ArgumentParser(description='Sparse encoder decoder model')
 
 parser.add_argument('-b', '--batch_size', default=15,
                             type=int, help='size of train batches')
-parser.add_argument('-n', '--num_epochs', default=5, type=int,
+parser.add_argument('-n', '--num_epochs', default=1, type=int,
                             help='number of epochs steps')
 parser.add_argument('-ks', '--kernel_size', default=5, type=int,
                             help='kernel size to be used in lista_conv')
@@ -50,6 +50,11 @@ parser.add_argument('--add_noise',  action='store_true', help='add noise to inpu
 parser.add_argument('--inpaint',  action='store_true', help='add noise to input')
 parser.add_argument('--inpaint_keep_prob', '-p', type=float, default=0.5,
         help='probilty to sample pixel')
+parser.add_argument('--recon_loss', default='l2', type=str, choices=['l2', 'l1'])
+parser.add_argument('--opt', default='adam', type=str, choices=['adam',
+    'momentum'])
+parser.add_argument('--clip_val', default=5, type=float, help='max value to clip gradiant')
+
 args = parser.parse_args()
 
 ###########################################################
@@ -65,21 +70,19 @@ def add_noise(X, std):
 
 
 def preprocess_data(X, addnoise=False, noise_sigma=0, inpaint=False, keep_prob=0.5):
-    if addnoise:
+    if addnoise or True:
        X = add_noise(X, noise_sigma)
+    X = X.astype('float32') / 255
+    #X -= np.mean(X, axis=(1, 2), keepdims=True)
+    #X /= np.std(X, axis=(1, 2), keepdims=True)
+    X = X[..., np.newaxis]
     if inpaint:
         X *= np.random.choice([0, 1], size=X.shape, p=[1 - keep_prob, keep_prob])
-    X = X.astype('float32')
-    X -= np.mean(X, axis=(1, 2), keepdims=True)
-    X /= np.std(X, axis=(1, 2), keepdims=True)
-    X = X[..., np.newaxis]
     return X
 
 ###########################################################
 #                   Load Data Sets
 ###########################################################
-
-
 
 #
 # load data
@@ -90,14 +93,10 @@ elif args.dataset == 'stl10':  # Data set with unlabeld too large cant loadfully
     if X_unlabel.shape[0] > 0:
         X_train = np.concatenate((X_train, X_unlabel), axis=0)
     np.random.shuffle(X_train)
-    np.random.shuffle(X_test)
+    # np.random.shuffle(X_test)
 elif args.dataset == 'cifar10':
     (X_train, _), (X_test, _) = cifar10.load_data()
     X_train, X_test = rgb2gray(X_train), rgb2gray(X_test)
-
-
-print("training size: {}, test size: {}".format(X_train.shape[0],
-      X_test.shape[0]))
 
 input_shape = X_train.shape
 
@@ -107,17 +106,17 @@ Y_train[:] = X_train[:]
 Y_test[:] = X_test[:]
 
 noise_sigma = 20
-# if args.add_noise == 1:
-#     X_train = add_noise(X_train, noise_sigma)
-#     X_test = add_noise(X_test, noise_sigma)
 
-X_train = preprocess_data(X_train, args.add_noise, noise_sigma,
-        args.inpaint, args.inpaint_keep_prob)
+
+X_train = preprocess_data(X_train, args.add_noise, noise_sigma, args.inpaint, args.inpaint_keep_prob)
 Y_train = preprocess_data(Y_train)
 
 X_test = preprocess_data(X_test, args.add_noise, noise_sigma, args.inpaint, args.inpaint_keep_prob)
 Y_test = preprocess_data(Y_test)
 
+print("training size: {}, test size: {}".format(X_train.shape[0],
+      X_test.shape[0]))
+train_size = X_train.shape[0]
 
 # split train set
 X_valid = X_train[:1000]
@@ -131,7 +130,10 @@ Y_train = Y_train[1000:]
 def savetstfig(sess, encoder, decoder, inputim, targetim, fname):
     
     Xhat = decoder.recon_image()
-    Z, im_hat = sess.run([encoder.output2d, Xhat], {encoder.input: inputim})
+    feed_dict = {encoder.input: inputim}
+    if args.inpaint:
+        feed_dict[encd_mask] =  (inputim == targetim).astype(float)
+    Z, im_hat = sess.run([encoder.output2d, Xhat], feed_dict)
     
     example_ims = DIR_PATH + 'logdir/data/' + fname
     f, axarr = plt.subplots(2, 2)
@@ -201,10 +203,16 @@ class Decoder():
     def recon_image(self):
         return self.output[-1]
 
-    def recon_loss_layer_i(self, input_index, name='l2'):
+    def recon_loss_layer_i(self, input_index, dist_name='l2', name='recon_loss'):
         if input_index > len(self.output):
             raise IndexError('layer index out of bounds')
-        return tf.reduce_mean(tf.reduce_sum(tf.square(self.target - self.output[input_index]), [1, 2]), name=name)
+        if dist_name == 'l2':
+            dist_fn = tf.square
+        elif dist_name == 'l1':
+            dist_fn = tf.abs
+
+        recon = self.output[input_index]
+        return tf.reduce_mean(tf.reduce_sum(dist_fn(self.target - recon), [1, 2]), name=name)
 
 
 
@@ -233,7 +241,12 @@ with tf.variable_scope('encoder'):
                                              shrinkge_type=args.shirnkge_type,
                                              kernel_count=args.kernel_count,
                                              init_params_dict=init_en_dict)
-encoder.build_model()
+    if args.inpaint:
+        encd_mask = tf.placeholder(tf.float32, shape=encoder.input2D.shape)
+    else:
+        encd_mask = 1
+
+encoder.build_model(encd_mask)
 decoder_trainable = not args.dont_train_dict
 with tf.variable_scope('decoder'):
     init_de = init_de if init_de is not None else encoder._Wd.initialized_value()
@@ -244,8 +257,9 @@ with tf.variable_scope('decoder'):
 
 # l2-loss with index -1 is reconstruction of final encoding 
 # l2-loss with index 0 is of indermidate encode
-l_rec  = decoder.recon_loss_layer_i(-1, 'recon_loss') + \
-         args.middle_loss_factor *  decoder.recon_loss_layer_i(0, 'recon_loss_stage_%d'%mdl_i)
+l_rec  = decoder.recon_loss_layer_i(-1, args.recon_loss, 'recon_loss') + \
+         args.middle_loss_factor * \
+         decoder.recon_loss_layer_i(0, args.recon_loss, 'recon_loss_stage_%d'%mdl_i)
 loss = l_rec
 #
 # LOSS
@@ -264,9 +278,6 @@ with tf.name_scope('encoder'):
     for i, t in enumerate(encoder._theta):
         with tf.name_scope('theta'+str(i)):
             variable_summaries(t)
-    # for i, t in enumerate(encoder._b):
-    #     with tf.name_scope('b'+str(i)):
-    #         variable_summaries(t)
 with tf.name_scope('decoder'):
     variable_summaries(decoder.decoder)
 with tf.name_scope('sparse_code'):
@@ -276,7 +287,7 @@ tf.summary.scalar('encoded_sparsity',
         tf.reduce_mean(tf.count_nonzero(encoder.output, 1)))
 if args.sparse_factor:
     tf.summary.scalar('l1_loss', l_sparse)
-tf.summary.scalar('l2recon_loss', l_rec)
+tf.summary.scalar('recon_loss', l_rec)
 tf.summary.scalar('total_loss', loss)
 tf.summary.image('input', encoder.input)
 tf.summary.image('output', decoder.recon_image())
@@ -294,13 +305,56 @@ if args.save_model or args.load_model:
 #######################################################
 #   Training Vars - optimizers and batch generators
 #######################################################
-global_step_en = tf.Variable(0, dtype=tf.int32, trainable=False, name='global_step_en')
-global_step_de = tf.Variable(0, dtype=tf.int32, trainable=False, name='global_step_de')
+def lerning_rate_timedecay(learning_rate, decay_rate, global_step, decay_steps):
+    learning_rate = tf.train.inverse_time_decay(
+            learning_rate=args.learning_rate,
+            global_step=global_step,
+            decay_steps=decay_steps,
+            decay_rate=decay_rate,
+            staircase=True
+            )
+    return learning_rate
+
+def clip_grad(optimizer, loss,  val, tr_vars, global_step):
+    gvs = optimizer.compute_gradients(loss, tr_vars)
+    capped_gvs = [(tf.clip_by_value(grad, -val, val), var) for grad, var in gvs]
+    optimizer = optimizer.apply_gradients(capped_gvs, global_step=global_step)
+    return optimizer
+
+def get_opt(name, lr=0.001, momentum=0.9):
+    if name == 'adam':
+        print('adam')
+        return tf.train.AdamOptimizer(lr)
+    elif name == 'momentum':
+        return  tf.train.MomentumOptimizer(lr, momentum, use_nesterov=True)
+
 encoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "encoder/")
-decoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "decoder/")
-optimizer_en = tf.train.AdamOptimizer(args.learning_rate).minimize(loss, var_list=encoder_vars, global_step=global_step_en)
+global_step_en = tf.Variable(
+        0,
+        dtype=tf.int32,
+        trainable=False,
+        name='global_step_en'
+        )
+lr_rate = lerning_rate_timedecay(
+        args.learning_rate,
+        30,
+        global_step_en,
+        train_size // args.batch_size
+        )
+
+optimizer_en = get_opt(args.opt, args.learning_rate).minimize(loss, var_list=encoder_vars, global_step=global_step_en)
+# optimizer_en = clip_grad(optimizer_en, loss, args.clip_val, encoder_vars, global_step_en)
+
 if not args.dont_train_dict:
-    optimizer_de = tf.train.AdamOptimizer(1.5 * args.learning_rate).minimize(loss, var_list=decoder_vars, global_step=global_step_de)
+    global_step_de = tf.Variable(0, dtype=tf.int32, trainable=False, name='global_step_de')
+    decoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "decoder/")
+    lr_rate = lerning_rate_timedecay(1.5 * args.learning_rate, 30, global_step_de,
+         train_size // args.batch_size)
+    optimizer_de =  get_opt(args.opt, args.learning_rate).minimize(loss,
+            var_list=decoder_vars, global_step=global_step_de)
+
+   # optimizer_de = clip_grad(optimizer_de, loss, args.clip_val, encoder_vars,
+   #         global_step_de)
 
 
 def nextbatch(X, Y, batch_size=500, run_once=False):
@@ -320,8 +374,8 @@ def nextbatch(X, Y, batch_size=500, run_once=False):
             batch_X = np.concatenate((X[offset: data_len], X[:batch_size - (data_len - offset)]), axis=0)
             batch_Y = np.concatenate((Y[offset: data_len], Y[:batch_size - (data_len - offset)]), axis=0)
             offset = batch_size - (data_len - offset)
+        yield batch_X, batch_Y    
         
-        yield batch_X, batch_Y
 
 print('batch size {}'.format(args.batch_size))
 test_batch = nextbatch(X=X_test, Y=Y_test, batch_size=500, run_once=True)
@@ -369,16 +423,20 @@ with tf.Session() as sess:
         b_num = 0
         for X_batch, Y_batch  in train_batch:
             b_num += 1
-            np.savez('one_batch_save', X=X_batch, C=Y_batch)
-            _, iter_loss = sess.run([optimizer_en, loss], {encoder.input: X_batch, decoder.target: Y_batch})
+            feed_dict = {encoder.input: X_batch, decoder.target: Y_batch}
+            if args.inpaint:
+                mask = (X_batch == Y_batch).astype(float)
+                feed_dict[encd_mask] = mask
+
+            _, iter_loss = sess.run([optimizer_en, loss], feed_dict)
             if not  args.dont_train_dict:
-                _, iter_loss = sess.run([optimizer_de, loss], {encoder.input: X_batch, decoder.target: Y_batch})
+                _, iter_loss = sess.run([optimizer_de, loss], feed_dict)
             train_loss.append(iter_loss)
             epoch_loss += iter_loss
 
 
             if b_num % 50 == 0:
-                summary = sess.run(merged, {encoder.input: X_batch, decoder.target: Y_batch})
+                summary = sess.run(merged, feed_dict)
                 train_summ_writer.add_summary(summary, global_step_en.eval())
 
             if b_num % 100 == 0:
@@ -387,20 +445,24 @@ with tf.Session() as sess:
                 sp_in_itr = 0
                 sp_out_itr = 0
                 l1 = 0
-                l2 = 0
+                recon = 0
                 vaild_batch = nextbatch(X=X_valid[:100], Y=Y_valid[:100], batch_size=50, run_once=True)
 
                 for Xv_batch, Yv_batch in vaild_batch:
                     v_itr += 1
-                    iter_loss, iter_l2, enc_out = sess.run([loss, l_rec, encoder.output],
-                                                           {encoder.input: Xv_batch, decoder.target: Yv_batch})
+                    feed_dict = {encoder.input: Xv_batch, decoder.target: Yv_batch}
+                    if args.inpaint:
+                        mask = (Xv_batch == Yv_batch).astype(float)
+                        feed_dict[encd_mask] = mask
+
+                    iter_loss, iter_recon, enc_out = sess.run([loss, l_rec, encoder.output], feed_dict)
 
                     sp_out_itr += np.count_nonzero(enc_out)/enc_out.shape[0]
                     sp_in_itr += np.count_nonzero(X_batch)/Xv_batch.shape[0]
                     valid_loss += iter_loss
-                    l2 += iter_l2
+                    recon += iter_recon
                 valid_loss /= v_itr
-                l2 /= v_itr
+                recon /= v_itr
                 validation_loss.append(valid_loss)
                 valid_sparsity_out.append(sp_out_itr/v_itr)
                 valid_sparsity_in.append(sp_in_itr/v_itr)
@@ -409,21 +471,22 @@ with tf.Session() as sess:
                         f_name = MODEL_DIR + 'csc_u{}_'.format(args.unroll_count)
                         saver.save(sess, f_name, global_step=global_step_en)
                         print('saving model at: %s'%f_name) 
-                print('valid loss: %f l2 loss: %f encoded sparsity: %f' %
-                      (valid_loss, l2, valid_sparsity_out[-1]))
-
+                print('valid loss: %f recon loss: %f encoded sparsity: %f' %
+                      (valid_loss, recon, valid_sparsity_out[-1]))
         print('epoch %d: loss val:%f' % (epoch, args.batch_size  * epoch_loss / X_train.shape[0]))
     
     test_loss = 0
-    l2_loss = 0
+    recon_loss = 0
     test_iter = 0
     for X_batch, Y_batch in test_batch:
         test_iter += 1
-        test_loss += sess.run(loss, {encoder.input: X_batch, decoder.target: Y_batch})
-        l2_loss += sess.run(l_rec, {encoder.input: X_batch, decoder.target: Y_batch})
-    print('='*40)
-    print('test loss: %f l2 loss: %f' % ((test_loss/test_iter), (l2_loss/test_iter)))
-    
+        feed_dict = {encoder.input: X_batch, decoder.target: Y_batch}
+        if args.inpaint:
+            mask = (X_batch == Y_batch).astype(float)
+            feed_dict[encd_mask] = mask
+        test_loss += sess.run(loss, feed_dict)
+        recon_loss += sess.run(l_rec, feed_dict)
+        
     # for debug save We/Wd
     We_Wd = DIR_PATH + 'logdir/data/We_Wd'
     We, Wd = sess.run([encoder._We, encoder._Wd])
@@ -431,7 +494,6 @@ with tf.Session() as sess:
 
     if args.test_fruits:
         X_fruit = rgb2gray(load_fruit_images.load())
-        fruit_std = np.mean(np.std(X_fruit, axis=(1, 2), keepdims=True))
         Y_fruit = np.empty(shape=X_fruit.shape)
         Y_fruit[:] = X_fruit[:]
         X_fruit = preprocess_data(X_fruit, args.add_noise, noise_sigma, args.inpaint, args.inpaint_keep_prob)
@@ -442,9 +504,9 @@ with tf.Session() as sess:
 
     # plot example image
     for ex_i in range(20):
-        i = np.random.randint(X_test.shape[0], size=1)
-        x = X_test[i, :]
-        y = Y_test[i, :]
+        # i = np.random.randint(X_test.shape[0], size=1)
+        x = X_test[[ex_i], :]
+        y = Y_test[[ex_i], :]
         savetstfig(sess, encoder, decoder, x, y, 'example'+str(ex_i))               
     
     print('='*40)
@@ -490,4 +552,6 @@ for f in decoder_filters.T:
 plt.savefig(DIR_PATH + 'logdir/plots/filters.png')
 print('seved plot of dict filter atoms in {}'.format(DIR_PATH + 'logdir/plots/filters.png'))
 
+print('='*40)
+print('test loss: %f recon loss: %f' % ((test_loss/test_iter), (recon_loss/test_iter)))
 

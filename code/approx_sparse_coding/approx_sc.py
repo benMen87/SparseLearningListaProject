@@ -70,7 +70,6 @@ class ApproxSC(object):
             return (1/beta)*tf.reduce_logsumexp([first, second, third], 0, name=name) - b
 
         return smooth_relu(X, beta, b, name+'_right') - smooth_relu(-X, beta, b, name+'_left')
- 
 
     def _soft_thrsh(self, X, theta, name=''):
         return tf.subtract(tf.nn.relu(X-theta), tf.nn.relu(-X-theta), name=name)

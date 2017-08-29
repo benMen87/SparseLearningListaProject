@@ -79,10 +79,10 @@ class LISTAConvDict2d(ApproxSC):
                 self._theta = [tf.nn.relu(tf.Variable(tf.random_uniform(shape=[1, self.amount_of_kernals])),
                                           name='theta')] * unroll_count
             elif self._shrinkge_type == 'smooth soft thresh':
-                
+
                 beta = [tf.Variable(tf.fill([1, self.amount_of_kernals], 5.0), name='beta'+str(u))
                               for u in range(unroll_count)]
-                b = [tf.Variable(tf.fill([1, self.amount_of_kernals], 0.5), name='b'+str(u)) 
+                b = [tf.Variable(tf.fill([1, self.amount_of_kernals], 0.5), name='b'+str(u))
                            for u in range(unroll_count)]
                 self._theta = zip(beta, b)
 
@@ -91,23 +91,38 @@ class LISTAConvDict2d(ApproxSC):
             self._We = tf.Variable(0.1 * init_We, name='We')
             self._Wd = tf.Variable(tf.transpose(tf.reverse(self._We.initialized_value(), [0,1]), [0,1,3,2]), name='We')
 
-    def build_model(self):
+    def build_model(self, mask=1):
+        """
+        mask - In case of inpainting etc.
+        """
         shrinkge_fn = self._shrinkge()
 
-        B = tf.nn.conv2d(tf.reshape(self._X, [-1, self.patch_dim, self.patch_dim, 1]),
-                         self._We, strides=[1, 1, 1, 1],
-                         padding='SAME', name='bias')
-        self._Z.append(shrinkge_fn(B, self._theta[0], 'Z0'))
+        X = tf.multiply(self._X, mask)
+        B = tf.nn.conv2d(
+                tf.reshape(X, [-1, self.patch_dim, self.patch_dim, 1]),
+                self._We,
+                strides=[1, 1, 1, 1],
+                padding='SAME', name='bias'
+            )
+        self._Z.append(shrinkge_fn(B, self._theta[0], '0'))
         #
         # run unrolling
         for t in range(1, self._unroll_count):
-            conv_wd = tf.nn.conv2d(self._Z[-1], self._Wd,
-                                   strides=[1, 1, 1, 1],
-                                   padding='SAME', name='convWd')
+            conv_wd = tf.nn.conv2d(
+                        self._Z[-1],
+                        self._Wd,
+                        strides=[1, 1, 1, 1],
+                        padding='SAME',
+                        name='convWd'
+                    )
+            conv_wd = tf.multiply(conv_wd, mask)
 
-            conv_we = tf.nn.conv2d(conv_wd, self._We,
-                                   strides=[1, 1, 1, 1],
-                                   padding='SAME', name='convWe')
+            conv_we = tf.nn.conv2d(
+                        conv_wd, self._We,
+                        strides=[1, 1, 1, 1],
+                        padding='SAME',
+                        name='convWe'
+                    )
             res = self._Z[-1] - conv_we
             res_add_bias = res + B
             self._Z.append(shrinkge_fn(res_add_bias, self._theta[t], 'Z'+str(t)))
