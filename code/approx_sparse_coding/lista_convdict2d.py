@@ -15,22 +15,22 @@ class LISTAConvDict2d(ApproxSC):
        -> We = (circ(f_0)|circ(f_1)|...|circ(f_n))^T or n fiters with depth of 1
     """
 
-    def __init__(self, We_shape, unroll_count, L,
+    def __init__(self, inputshape, unroll_count, L,
                  filter_arr=None, batch_size=1, kernel_count=1, kernel_size=3,
                  shared_threshold=False, shrinkge_type='soft thresh',
-                 init_params_dict={}):
+                 init_params_dict={}, channel_size=3):
         """ Create a LCoD model.
         Args:
-            We_shape: Input X is encoded using conv2D(We, X).
+            inputshape: Input X is encoded using conv2D(We, X).
             unroll_size: Amount of times to repeat lcod block.
         """
 
-        super(LISTAConvDict2d, self).__init__(We_shape, unroll_count, input2d=True,
+        super(LISTAConvDict2d, self).__init__(inputshape, unroll_count, input2d=True,
                                               shrinkge_type=shrinkge_type, shared_threshold=shared_threshold,
-                                              batch_size=batch_size)
+                                              batch_size=batch_size, channel_size=channel_size)
 
-        self.input_channels = 1  # TODO: add support for RGB?
-        self.patch_dim = np.int(np.sqrt(self.input_size))
+        self.inputshape = inputshape
+        self._X = tf.placeholder(tf.float32, shape=(None, self.inputshape[0], self.inputshape[1], self.input_channels), name='X')
         #
         # model variables
         if not init_params_dict and filter_arr is not None :
@@ -57,7 +57,8 @@ class LISTAConvDict2d(ApproxSC):
             self.amount_of_kernals = init_params_dict['Wd'].shape[2]
 
             if self._shrinkge_type == 'soft thresh':
-                self._theta = [tf.nn.relu(tf.Variable(tf.fill([1, self.amount_of_kernals], value=0.3)),
+                self._theta = [tf.nn.relu(tf.Variable(tf.fill([1,
+                    self.amount_of_kernals], value=0.1)),
                                           name='theta')] * unroll_count
                 # self._theta = [tf.Variable(init_params_dict['theta'][0], name='theta')]
                 # self._theta += [tf.Variable(init_params_dict['theta'][-1], name='theta')
@@ -77,7 +78,9 @@ class LISTAConvDict2d(ApproxSC):
             if self._shrinkge_type == 'soft thresh':
                 #TODO: Notice thresh is now shared one for each feture map
                 self._theta = [tf.nn.relu(tf.Variable(tf.random_uniform(shape=[1, self.amount_of_kernals])),
-                                          name='theta')] * unroll_count
+                                            name='theta')] * unroll_count
+                #self._theta = [tf.nn.relu(tf.Variable(tf.fill([1,
+                #     self.amount_of_kernals], value=0.0)), name='theta')] * unroll_count
             elif self._shrinkge_type == 'smooth soft thresh':
 
                 beta = [tf.Variable(tf.fill([1, self.amount_of_kernals], 5.0), name='beta'+str(u))
@@ -99,7 +102,7 @@ class LISTAConvDict2d(ApproxSC):
 
         X = tf.multiply(self._X, mask)
         B = tf.nn.conv2d(
-                tf.reshape(X, [-1, self.patch_dim, self.patch_dim, 1]),
+                X,
                 self._We,
                 strides=[1, 1, 1, 1],
                 padding='SAME', name='bias'
@@ -164,7 +167,7 @@ class LISTAConvDict2d(ApproxSC):
 
     @property
     def input2D(self):
-        return tf.reshape(self._X, [-1, self.patch_dim, self.patch_dim, 1])
+        return self._X
 
     @property
     def output(self):

@@ -132,7 +132,16 @@ def download_and_extract():
 
 def rgb2gray(X):
     r, g, b = X[..., 0], X[...,1], X[...,2]
-    return (0.2125 * r) + (0.7154 * g) + (0.0721 * b)
+    X = (0.2125 * r) + (0.7154 * g) + (0.0721 * b)
+    X = X[..., np.newaxis]
+    return X
+
+def load_test(grayscale=False):
+    test_images = read_all_images(TS_DATA_PATH)
+    test_labels = read_labels(TS_LABEL_PATH)
+    if grayscale:
+        test_images = rgb2gray(test_images)
+    return test_images, test_labels
 
 def load_data(grayscale=False, unlabel_count=-1):
     """
@@ -145,16 +154,14 @@ def load_data(grayscale=False, unlabel_count=-1):
     unlabel_images = np.array([])
     if unlabel_count != 0:
         unlabel_images = read_all_images(UNLB_DATA_PATH, unlabel_count)
-    test_images = read_all_images(TS_DATA_PATH)
-    test_labels = read_labels(TS_LABEL_PATH)
-
+    
     if grayscale:
         train_images = rgb2gray(train_images)
-        test_images = rgb2gray(test_images)
         if unlabel_count != 0:
             unlabel_images = rgb2gray(unlabel_images)
+    test_images, test_labels = load_test(grayscale)
 
-    return (train_images, train_labels), (test_images, test_labels), unlabel_images
+    return (train_images + unlabel_images, train_labels), (test_images, test_labels)
 
 if __name__ == "__main__":
     # download data if needed
