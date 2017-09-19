@@ -9,7 +9,7 @@ from keras.utils import np_utils
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-
+import scipy.io as scio
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))+'/'
 sys.path.append(os.path.abspath(DIR_PATH + '../approx_sparse_coding'))
 sys.path.append(os.path.abspath(DIR_PATH + '../'))
@@ -17,7 +17,7 @@ sys.path.append(os.path.abspath(DIR_PATH + '../'))
 import lista_convdict2d as sparse_encoder 
 from Utils import stl10_input
 from Utils import load_images 
-from Utils import load_BSDS300
+from Utils import load_berkeley 
 from Utils.psnr import psnr as psnr
 
 parser = argparse.ArgumentParser(description='Sparse encoder decoder model')
@@ -70,7 +70,8 @@ args = parser.parse_args()
 def rgb2gray(X):
     r, g, b = X[..., 0], X[...,1], X[...,2]
     X = (0.2125 * r) + (0.7154 * g) + (0.0721 * b)
-    X = X[..., np.newaxis]
+    if len(X.shape) == 2:
+        X = X[..., np.newaxis]
     return X
 
 def add_noise(X, std):
@@ -88,12 +89,13 @@ def preprocess_data(X, addnoise=False, noise_sigma=0, inpaint=False,
     else:
         norm = 255 if np.max(X) <= 255 else np.max(X) 
         X = X.astype('float32') / norm
-    
+
     if (len(X.shape) == 3 and not args.grayscale) or (len(X.shape) == 2 and args.grayscale):
         X = X[..., np.newaxis]
 
     if inpaint:
         X *= np.random.choice([0, 1], size=X.shape, p=[1 - keep_prob, keep_prob])
+        np.save('inpaint_debug', X)
     return X
 
 ###########################################################
@@ -104,20 +106,27 @@ def preprocess_data(X, addnoise=False, noise_sigma=0, inpaint=False,
 # load data
 if args.dataset == 'stl10':  # Data set with unlabeld too large cant loadfully to memory
     if not args.test:
-        (X_train, _), (X_test, _), X_unlabel =\
-        stl10_input.load_data(grayscale=args.grayscale)
-        if X_unlabel.shape[0] > 0:
-            X_train = np.concatenate((X_train, X_unlabel), axis=0)
-        X_train = np.random.shuffle(X_train)
+        X_train, X_test= stl10_input.load_data(grayscale=args.grayscale)
+        np.random.shuffle(X_train)
     else:
         X_test, _ = stl10_input.load_test(grayscale=args.grayscale)
     # np.random.shuffle(X_test)
-elif args.dataset == 'BSDS':
-    X_train, X_test = load_BSDS300.load(args.grayscale)
+elif args.dataset == 'berkeley':
+    X_train, X_test = load_berkeley.load(args.grayscale)
+    np.random.shuffle(X_train)
 else: # dataset is a path of imags to load
     X_test = load_images.load(args.dataset, args.grayscale)
+    print(X_test.shape)
 
 noise_sigma = 20
+
+
+Y_test =  np.empty(shape=X_test.shape)
+Y_test[:] = X_test[:]
+X_test = preprocess_data(X_test, args.add_noise, noise_sigma, args.inpaint,
+        args.inpaint_keep_prob, args.whiten)
+Y_test = preprocess_data(Y_test, whiten=args.whiten)
+input_shape = X_test.shape[1:]
 
 if not args.test:
     Y_train = np.empty(shape=X_train.shape)
@@ -127,46 +136,39 @@ if not args.test:
     Y_train = preprocess_data(Y_train, whiten=args.whiten)
     # split train set
     dataset_size = X_train.shape[0]
-    train_size = int(np.ceil(dataset_size * 0.8))
+    train_size = int(np.ceil(dataset_size * 0.9))
     valid_size = dataset_size - train_size
-    X_valid = X_train[:valid_size]
-    X_train = X_train[valid_size:]
-    Y_valid = Y_train[:valid_size]
-    Y_train = Y_train[valid_size:]
-
-    print("training size: {}, test size: {}".format(X_train.shape[0],
-      X_test.shape[0]))
+    if not args.dataset == 'berkeley':
+        X_valid = X_train[:valid_size]
+        X_train = X_train[valid_size:]
+        Y_valid = Y_train[:valid_size]
+        Y_train = Y_train[valid_size:]
+    else:
+        X_valid = X_test
+        Y_valid = Y_test
+    print("training size: {}, test size: {}".format(X_train.shape[0], X_test.shape[0]))
     train_size = X_train.shape[0]
-    
-
-
-Y_test =  np.empty(shape=X_test.shape)
-Y_test[:] = X_test[:]
-X_test = preprocess_data(X_test, args.add_noise, noise_sigma, args.inpaint,
-        args.inpaint_keep_prob, args.whiten)
-
-Y_test = preprocess_data(Y_test, whiten=args.whiten)
-input_shape = X_test.shape[1:]
 ######################################################
 #   Plot and save test image
 ######################################################
 def savetstfig(sess, encoder, decoder, inputim, targetim, fname):
-    
+
     Xhat = decoder.recon_image()
     feed_dict = {encoder.input: inputim}
     if args.inpaint:
         feed_dict[encd_mask] =  (inputim == targetim).astype(float)
     Z, im_hat = sess.run([encoder.output2d, Xhat], feed_dict)
     
+    np.clip(im_hat, 0, 1)  # clip values
     example_ims = DIR_PATH + 'logdir/data/' + fname
     f, axarr = plt.subplots(2, 2)
     np.savez(example_ims, X=inputim, Y=targetim, Z=Z, IM_hat=im_hat)
- 
+
     cmap = 'gray' #if args.grayscale else 'viridis'
     print('saved example img data de/en at %s' % example_ims)
-   
-    axarr[0, 1].axis('off')    
-    
+
+    axarr[0, 1].axis('off')
+
     axarr[0,0].imshow(np.squeeze(targetim), cmap=cmap)
     axarr[0,0].set_title('original image')
     axarr[0,0].axis('off')
@@ -174,9 +176,10 @@ def savetstfig(sess, encoder, decoder, inputim, targetim, fname):
     axarr[1,1].imshow(np.squeeze(inputim), cmap=cmap)
     axarr[1,1].set_title('noisy image -  psnr: {0:.3} [db]'.format(psnr(targetim, inputim)))
     axarr[1,1].axis('off')
-     
+
     axarr[1,0].imshow(np.squeeze(im_hat), cmap=cmap)
-    axarr[1,0].set_title('reconstructed image -  psnr: {0:.3} [db]'.format(psnr(targetim, im_hat)))
+    axarr[1,0].set_title('reconstructed image -  psnr: {0:.3}\
+            [db]'.format(psnr(targetim, im_hat)))
     axarr[1,0].axis('off')
 
     example_ims = DIR_PATH + 'logdir/plots/' + fname + '.png'
@@ -184,26 +187,31 @@ def savetstfig(sess, encoder, decoder, inputim, targetim, fname):
     plt.close()
 
     #### TEMP remove ####
-    w=h=2
-    dpi=50
     fig = plt.figure(frameon=False)
-    fig.set_size_inches(w,h)
     ax = plt.Axes(fig, [0., 0., 1., 1.])
     ax.set_axis_off()
     fig.add_axes(ax)
     ax.imshow(np.squeeze(im_hat), cmap=cmap, aspect='normal')
-    fig.savefig('result_im', dpi=dpi)
+    fig.savefig('result_im', bbox_inches='tight', pad_inches=0)
+
+    fig = plt.figure(frameon=False)
+    ax = plt.Axes(fig, [0., 0., 1., 1.])
+    ax.set_axis_off()
+    fig.add_axes(ax)
+    ax.imshow(np.squeeze(inputim), cmap=cmap, aspect='normal')
+    fig.savefig('noise_im', bbox_inches='tight', pad_inches=0)
     print('saved example img plot de/en at %s' % example_ims)
+    scio.savemat('res_mat', {'z': np.squeeze(inputim), 'recon':
+        np.squeeze(im_hat), 'y': np.squeeze(targetim)})
 
 def test(encoder, decoder, batch, loss=None):
     test_loss = 0
     recon_loss = 0
     test_iter = 0
     print('batch size {}'.format(args.batch_size))
-    
 
     for X_batch, Y_batch in test_batch:
-        
+
         feed_dict = {encoder.input: X_batch, decoder.target: Y_batch}
         if args.inpaint:
             mask = (X_batch == Y_batch).astype(float)
@@ -211,7 +219,7 @@ def test(encoder, decoder, batch, loss=None):
         test_loss += sess.run(loss, feed_dict)
         recon_loss += sess.run(l_rec, feed_dict)
         test_iter += 1
-        
+
     if test_iter:
         test_loss, recon_loss = test_loss/test_iter, recon_loss/test_iter
 
@@ -408,8 +416,8 @@ if not args.test:
             global_step_en,
             train_size // args.batch_size
             )
-
-    optimizer_en = get_opt(args.opt, args.learning_rate).minimize(loss, var_list=encoder_vars, global_step=global_step_en)
+    learning_rate_var = tf.Variable(args.learning_rate)
+    optimizer_en = get_opt(args.opt, learning_rate_var).minimize(loss, var_list=encoder_vars, global_step=global_step_en)
     # optimizer_en = clip_grad(optimizer_en, loss, args.clip_val, encoder_vars, global_step_en)
 
     if not args.dont_train_dict:
@@ -417,7 +425,7 @@ if not args.test:
         decoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "decoder/")
         lr_rate = lerning_rate_timedecay(1.5 * args.learning_rate, 30, global_step_de,
              train_size // args.batch_size)
-        optimizer_de =  get_opt(args.opt, 1.5 *  args.learning_rate).minimize(loss,
+        optimizer_de =  get_opt(args.opt, 1.5 * learning_rate_var).minimize(loss,
                 var_list=decoder_vars, global_step=global_step_de)
 
        # optimizer_de = clip_grad(optimizer_de, loss, args.clip_val, encoder_vars,
@@ -441,8 +449,11 @@ def nextbatch(X, Y, batch_size=500, run_once=False):
             batch_X = np.concatenate((X[offset: data_len], X[:batch_size - (data_len - offset)]), axis=0)
             batch_Y = np.concatenate((Y[offset: data_len], Y[:batch_size - (data_len - offset)]), axis=0)
             offset = batch_size - (data_len - offset)
-        yield batch_X, batch_Y    
-        
+            # reshuffle batch
+            idx = np.random.permutation(X.shape[0])
+            X = X[idx,...]
+            Y = Y[idx,...]
+        yield batch_X, batch_Y
 ###################################################################
 #                Training   +   Results
 ###################################################################
@@ -474,7 +485,7 @@ with tf.Session() as sess:
             print('no cpk to load running with random init')
 
     if args.test:
-        test_batch = nextbatch(X=X_test, Y=Y_test, batch_size=500, run_once=True)
+        test_batch = nextbatch(X=X_test, Y=Y_test, batch_size=5, run_once=True)
         test_loss, test_recon_loss = test(encoder, decoder, test_batch, loss)
         print('test loss: %f recon loss: %f' % (test_loss, test_recon_loss))
         exit(0)
@@ -484,6 +495,7 @@ with tf.Session() as sess:
         sess.add_tensor_filter("has_inf_or_nan", tf_debug.has_inf_or_nan)
         sess.add_tensor_filter("all_zero", all_zero)
 
+    print('number of epochs %d'%args.num_epochs)
     for epoch in range(1, args.num_epochs + 1):
         epoch_loss = 0
         print('epoch number:%d', epoch)
@@ -492,7 +504,6 @@ with tf.Session() as sess:
         b_num = 0
         for X_batch, Y_batch in train_batch:
             b_num += 1
-            print('batch number %d'%b_num)
             feed_dict = {encoder.input: X_batch, decoder.target: Y_batch}
             if args.inpaint:
                 mask = (X_batch == Y_batch).astype(float)
@@ -516,7 +527,7 @@ with tf.Session() as sess:
                 sp_out_itr = 0
                 l1 = 0
                 recon = 0
-                vaild_batch = nextbatch(X=X_valid[:100], Y=Y_valid[:100], batch_size=50, run_once=True)
+                vaild_batch = nextbatch(X=X_valid, Y=Y_valid, batch_size=5, run_once=True)
                 for Xv_batch, Yv_batch in vaild_batch:
                     v_itr += 1
                     feed_dict = {encoder.input: Xv_batch, decoder.target: Yv_batch}
@@ -524,7 +535,8 @@ with tf.Session() as sess:
                         mask = (Xv_batch == Yv_batch).astype(float)
                         feed_dict[encd_mask] = mask
 
-                    iter_loss, iter_recon, enc_out = sess.run([loss, l_rec, encoder.output], feed_dict)
+                    iter_loss, iter_recon, enc_out = sess.run([loss, l_rec,
+                        encoder.output2d], feed_dict)
 
                     sp_out_itr += np.count_nonzero(enc_out)/enc_out.shape[0]
                     sp_in_itr += np.count_nonzero(X_batch)/Xv_batch.shape[0]
@@ -535,13 +547,18 @@ with tf.Session() as sess:
                 validation_loss.append(valid_loss)
                 valid_sparsity_out.append(sp_out_itr/v_itr)
                 valid_sparsity_in.append(sp_in_itr/v_itr)
-                if args.save_model:
-                    if valid_loss <= np.min(validation_loss):
+                if valid_loss <= np.min(validation_loss):
+                    if args.save_model:
                         f_name = MODEL_DIR + 'csc_u{}_'.format(args.unroll_count)
                         saver.save(sess, f_name, global_step=global_step_en)
                         print('saving model at: %s'%f_name) 
+                if len(validation_loss)  > 5:
+                    if (valid_loss > validation_loss[-2]).all():
+                        learning_rate_var *= 0.1
+                        print('decreasing learning_rate to\
+                                {}'.format(learning_rate_var.eval()))
                 print('valid loss: %f recon loss: %f encoded sparsity: %f' %
-                      (valid_loss, recon, valid_sparsity_out[-1]))
+                    (valid_loss, recon, valid_sparsity_out[-1]))
         print('epoch %d: loss val:%f' % (epoch, args.batch_size  * epoch_loss / X_train.shape[0]))
 
     print('='*40)
