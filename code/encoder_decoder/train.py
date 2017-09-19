@@ -4,7 +4,6 @@ import numpy as np
 import tensorflow as tf
 import argparse
 from tensorflow.python import debug as tf_debug
-from keras.datasets import mnist, cifar10
 from keras.utils import np_utils
 import matplotlib
 matplotlib.use('Agg')
@@ -42,7 +41,7 @@ parser.add_argument('--name', default='lista_ed', type=str, help='used for\
         creating load/store log dir names')
 parser.add_argument('--load_name', default='', type=str, help='used to\
         load from a model with "name" diffrent from this model name')
-parser.add_argument('--dataset', default='/home/hillel/projects/FastFlexibleCSC_Code_Heide2015/datasets/Images/fruit_100_100/4.jpg') #, choices=['mnist', 'stl10', 'cifar10'])
+parser.add_argument('--dataset', default='stl10') #, choices=['mnist', 'stl10', 'cifar10'])
 parser.add_argument('--whiten', action='store_true')
 parser.add_argument('--sparse_factor', '-sf',  default=0.5, type=float)
 parser.add_argument('--middle_loss_factor', '-mf', default=0.1, type=float)
@@ -263,9 +262,9 @@ def variable_summaries(var):
 
 # Define decoder class
 class Decoder():
-    def __init__(self, init_val, output_shape):
-        self.decoder = tf.Variable(init_val, name='decoder', trainable=decoder_trainable)
-        self.decoder = tf.nn.l2_normalize(self.decoder, dim=[0, 1], name='normilized_dict') # keep decoder atoms with l2 norm of 1
+    def __init__(self, init_vals, output_shape):
+        self.decoder = [tf.Variable(init_val, name='decoder') for init_val in init_vals]
+        self.decoder = [tf.nn.l2_normalize(ker, dim=[0, 1], name='normilized_dict') for ker in self.decoder] # keep decoder atoms with l2 norm of 1
         self.target = tf.placeholder(tf.float32, shape=output_shape)
         self.output = []
 
@@ -274,7 +273,8 @@ class Decoder():
 
     def build_model(self, encoded_in):
          """Can pass multiple inputs at diffrent time state of encoder"""
-         self.output = [self.reconstruct(enc_in) for enc_in in  encoded_in]
+         out = tf.concate([self.reconstruct(enc_in) for enc_in in  encoded_in], axis=-1)
+         self.output = tf.reduce_sum(out, -1)
 
     def decoder_outall(self):
         return self.output
@@ -325,7 +325,7 @@ with tf.variable_scope('encoder'):
 encoder.build_model(encd_mask)
 decoder_trainable = not args.dont_train_dict
 with tf.variable_scope('decoder'):
-    init_de = init_de if init_de is not None else encoder._Wd.initialized_value()
+    init_de = [res_wd.initialized_value() for res_wd in  encoder._Wd]
     output_shape =[None] + list(input_shape)
     decoder = Decoder(init_de, output_shape=output_shape)
     deco_input = [encoder.output2d_i(mdl_i), encoder.output2d]

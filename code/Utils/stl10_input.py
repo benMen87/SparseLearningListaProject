@@ -24,7 +24,7 @@ SIZE = HEIGHT * WIDTH * DEPTH
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))
 
 # path to the directory with the data
-DATA_DIR = DIR_PATH + '/data'
+DATA_DIR = DIR_PATH + '/../../images/'
 
 # url of the binary data
 DATA_URL = 'http://ai.stanford.edu/~acoates/stl10/stl10_binary.tar.gz'
@@ -34,11 +34,11 @@ TR_DATA_PATH = DIR_PATH + '/data/stl10_binary/train_X.bin'
 TR_LABEL_PATH = DIR_PATH + '/data/stl10_binary/train_y.bin'
 
 # path to binary unlabeld 
-UNLB_DATA_PATH = DIR_PATH + '/data/stl10_binary/unlabeled_X.bin'
+UNLB_DATA_PATH = DIR_PATH + '/../../images/stl10_binary/unlabeled_X.bin'
 
 # paths to test file with image data and label
-TS_DATA_PATH = DIR_PATH + '/data/stl10_binary/test_X.bin'
-TS_LABEL_PATH = DIR_PATH + '/data/stl10_binary/test_y.bin'
+TS_DATA_PATH = DIR_PATH + '/../../images/stl10_binary/test_X.bin'
+TS_LABEL_PATH = DIR_PATH + '/../../images/stl10_binary/test_y.bin'
 
 
 
