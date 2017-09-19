@@ -159,9 +159,10 @@ def load_data(grayscale=False, unlabel_count=-1):
         train_images = rgb2gray(train_images)
         if unlabel_count != 0:
             unlabel_images = rgb2gray(unlabel_images)
-    test_images, test_labels = load_test(grayscale)
-
-    return (train_images + unlabel_images, train_labels), (test_images, test_labels)
+            train_images  = np.concatenate((train_images, unlabel_images), axis=0)
+        test_images, test_labels = load_test(grayscale)
+        print('test shape {}'.format(test_images.shape))
+    return train_images, test_images
 
 if __name__ == "__main__":
     # download data if needed

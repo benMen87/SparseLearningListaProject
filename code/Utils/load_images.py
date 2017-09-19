@@ -25,12 +25,13 @@ def load(searchpath, grayscale=False):
         # X.append(np.array(resizeimage.resize_cover(Image.open(im_path), [96, 96, -1])))
     X = np.array(X)
 
-    if len(X.shape) == 3:
+    if len(X.shape) == 3 and X.shape[-1] > 1:
         X = X[...,np.newaxis]
 
     if grayscale:
         X = rgb2gray(X)
-        X = X[..., np.newaxis]
+        if len(X.shape) == 2:
+            X = X[..., np.newaxis]
     return np.array(X)
 
 #load_fruit()

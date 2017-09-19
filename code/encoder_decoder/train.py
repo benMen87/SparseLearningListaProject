@@ -159,7 +159,8 @@ def savetstfig(sess, encoder, decoder, inputim, targetim, fname):
         feed_dict[encd_mask] =  (inputim == targetim).astype(float)
     Z, im_hat = sess.run([encoder.output2d, Xhat], feed_dict)
     
-    np.clip(im_hat, 0, 1)  # clip values
+    im_hat /= np.max(im_hat)
+    # np.clip(im_hat, 0, 1)  # clip values
     example_ims = DIR_PATH + 'logdir/data/' + fname
     f, axarr = plt.subplots(2, 2)
     np.savez(example_ims, X=inputim, Y=targetim, Z=Z, IM_hat=im_hat)
@@ -554,7 +555,7 @@ with tf.Session() as sess:
                         print('saving model at: %s'%f_name) 
                 if len(validation_loss)  > 5:
                     if (valid_loss > validation_loss[-2]).all():
-                        learning_rate_var *= 0.1
+                        learning_rate_var *= 0.9
                         print('decreasing learning_rate to\
                                 {}'.format(learning_rate_var.eval()))
                 print('valid loss: %f recon loss: %f encoded sparsity: %f' %
