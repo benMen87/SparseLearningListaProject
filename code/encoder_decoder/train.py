@@ -14,7 +14,7 @@ DIR_PATH = os.path.dirname(os.path.realpath(__file__))+'/'
 sys.path.append(os.path.abspath(DIR_PATH + '../approx_sparse_coding'))
 sys.path.append(os.path.abspath(DIR_PATH + '../'))
 
-import lista_convdict2d as sparse_encoder 
+import sparse_aed
 from Utils import stl10_input
 from Utils import load_images 
 from Utils import load_berkeley 
@@ -32,7 +32,7 @@ parser.add_argument('-kc', '--kernel_count', default=36, type=int,
                             help='amount of kernel to use in lista_conv')
 parser.add_argument('-u', '--unroll_count', default=10,
                     type=int, help='Amount of Reccurent timesteps for decoder')
-parser.add_argument('--shirnkge_type', default='soft thresh',
+parser.add_argument('--shrinkge_type', default='soft thresh',
                         choices=['soft thresh', 'smooth soft thresh'])
 parser.add_argument('--learning_rate', '-lr', default=0.001, type=float, help='learning rate')
 parser.add_argument('--save_model', dest='save_model', action='store_true')
@@ -81,15 +81,16 @@ def add_noise(X, std):
 
 def preprocess_data(X, addnoise=False, noise_sigma=0, inpaint=False,
         keep_prob=0.5, whiten=False):
-    if addnoise:
-        X = add_noise(X, noise_sigma)
     if whiten:
         X -= np.mean(X, axis=(1, 2), keepdims=True)
         X /= np.std(X, axis=(1, 2), keepdims=True)
     else:
         norm = 255 if np.max(X) <= 255 else np.max(X) 
         X = X.astype('float32') / norm
-
+        noise_sigma = float(noise_sigma) / norm
+    if addnoise:
+        X = add_noise(X, noise_sigma)
+ 
     if (len(X.shape) == 3 and not args.grayscale) or (len(X.shape) == 2 and args.grayscale):
         X = X[..., np.newaxis]
 
@@ -113,6 +114,10 @@ if args.dataset == 'stl10':  # Data set with unlabeld too large cant loadfully t
     # np.random.shuffle(X_test)
 elif args.dataset == 'berkeley':
     X_train, X_test = load_berkeley.load(args.grayscale)
+    np.random.shuffle(X_train)
+elif args.dataset == 'pascal':
+    path = load_berkeley.IMGSPATH + 'psacal_gray.npz'
+    X_train, X_test = load_berkeley.load(args.grayscale, path)
     np.random.shuffle(X_train)
 else: # dataset is a path of imags to load
     X_test = load_images.load(args.dataset, args.grayscale)
@@ -157,10 +162,10 @@ def savetstfig(sess, encoder, decoder, inputim, targetim, fname):
     feed_dict = {encoder.input: inputim}
     if args.inpaint:
         feed_dict[encd_mask] =  (inputim == targetim).astype(float)
-    Z, im_hat = sess.run([encoder.output2d, Xhat], feed_dict)
+    Z, im_hat = sess.run([encoder.output, Xhat], feed_dict)
     
-    im_hat /= np.max(im_hat)
-    # np.clip(im_hat, 0, 1)  # clip values
+    # im_hat /= np.max(im_hat)
+    np.clip(im_hat, 0, 1)  # clip values
     example_ims = DIR_PATH + 'logdir/data/' + fname
     f, axarr = plt.subplots(2, 2)
     np.savez(example_ims, X=inputim, Y=targetim, Z=Z, IM_hat=im_hat)
@@ -226,7 +231,7 @@ def test(encoder, decoder, batch, loss=None):
 
     # for debug save We/Wd
     We_Wd = DIR_PATH + 'logdir/data/We_Wd'
-    We, Wd, theta = sess.run([encoder._We, encoder._Wd, encoder._theta[0]])
+    We, Wd, theta = sess.run([encoder._We, encoder._Wd, encoder._theta])
     np.savez(We_Wd, Wd=Wd, We=We, theta=theta)
 
     # plot example image
@@ -243,7 +248,9 @@ def test(encoder, decoder, batch, loss=None):
 #######################################################
 #   Log-network for tensorboard
 #######################################################
-tensorboard_path = DIR_PATH + 'logdir/tb/'
+tensorboard_path = '/data/hillel/tb/' + args.name + '/'
+if not os.path.isdir(tensorboard_path):
+    os.mkdir(tensorboard_path)
 
 def variable_summaries(var):
     """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
@@ -260,88 +267,19 @@ def variable_summaries(var):
 ########################################################
 #       Build Models - Sparse Encoder Decoder
 ########################################################
-
-# Define decoder class
-class Decoder():
-    def __init__(self, init_val, output_shape):
-        self.decoder = tf.Variable(init_val, name='decoder', trainable=decoder_trainable)
-        self.decoder = tf.nn.l2_normalize(self.decoder, dim=[0, 1], name='normilized_dict') # keep decoder atoms with l2 norm of 1
-        self.target = tf.placeholder(tf.float32, shape=output_shape)
-        self.output = []
-
-    def reconstruct(self, encoder_out):
-        return tf.nn.conv2d(encoder_out, self.decoder, strides=[1, 1, 1, 1], padding='SAME')
-
-    def build_model(self, encoded_in):
-         """Can pass multiple inputs at diffrent time state of encoder"""
-         self.output = [self.reconstruct(enc_in) for enc_in in  encoded_in]
-
-    def decoder_outall(self):
-        return self.output
-
-    def recon_image(self):
-        return self.output[-1]
-
-    def recon_loss_layer_i(self, input_index, dist_name='l2', name='recon_loss'):
-        if input_index > len(self.output):
-            raise IndexError('layer index out of bounds')
-        if dist_name == 'l2':
-            dist_fn = tf.square
-        elif dist_name == 'l1':
-            dist_fn = tf.abs
-
-        recon = self.output[input_index]
-        return tf.reduce_mean(tf.reduce_sum(dist_fn(self.target - recon), [1, 2]), name=name)
-
-
-
-#
-# build encoder-decoder
-
-init_de = None
-init_en_dict = {}
-if args.load_pretrained_dict:
-    print('loading dict')
-    trained_dict = np.load(DIR_PATH + 'pretrained_dict/learned_dict.npy')
-    init_de = trained_dict.astype('float32')
-    init_en_dict['Wd'] = init_de
-    init_en_dict['We'] = 0.01 * np.transpose(np.flip(np.flip(init_de, axis=0), axis=1), [0, 1, 3, 2])
-
-mdl_i = args.unroll_count // 2
-
-with tf.variable_scope('encoder'):
-    encoder = sparse_encoder.LISTAConvDict2d(inputshape=input_shape,
-                                             unroll_count=args.unroll_count,
-                                             L=1, batch_size=args.batch_size,
-                                             kernel_size=args.kernel_size,
-                                             shrinkge_type=args.shirnkge_type,
-                                             kernel_count=args.kernel_count,
-                                             init_params_dict=init_en_dict,channel_size=input_shape[-1])
-    if args.inpaint:
-        encd_mask = tf.placeholder(tf.float32, shape=encoder.input2D.shape)
-    else:
-        encd_mask = 1
-
-encoder.build_model(encd_mask)
-decoder_trainable = not args.dont_train_dict
-with tf.variable_scope('decoder'):
-    init_de = init_de if init_de is not None else encoder._Wd.initialized_value()
-    output_shape =[None] + list(input_shape)
-    decoder = Decoder(init_de, output_shape=output_shape)
-    deco_input = [encoder.output2d_i(mdl_i), encoder.output2d]
-    decoder.build_model(deco_input)
-
+encoder, decoder, encd_mask = sparse_aed.build_model(args, input_shape)
 
 # l2-loss with index -1 is reconstruction of final encoding 
 # l2-loss with index 0 is of indermidate encode
-l_rec  = decoder.recon_loss_layer_i(-1, args.recon_loss, 'recon_loss') + \
-         args.middle_loss_factor * \
-         decoder.recon_loss_layer_i(0, args.recon_loss, 'recon_loss_stage_%d'%mdl_i)
-loss = l_rec
+l_rec  = decoder.recon_loss_layer_i(-1, encd_mask, args.recon_loss, 'recon_loss')
+         #args.middle_loss_factor * \
+         #decoder.recon_loss_layer_i(mdl_i, args.recon_loss, 'recon_loss_stage_%d'%mdl_i)
+loss_total_var =  tf.reduce_mean(tf.image.total_variation(decoder.recon_image()))
+loss = l_rec + 0 * loss_total_var
 #
 # LOSS
 if args.sparse_factor:
-    l_sparse = tf.reduce_mean(tf.reduce_sum(tf.abs(encoder.output2d), [1, 2, 3]), name='l1')
+    l_sparse = tf.reduce_mean(tf.reduce_sum(tf.abs(encoder.output), [1, 2, 3]), name='l1')
     loss += args.sparse_factor * l_sparse
 
 #######################################################
@@ -353,17 +291,18 @@ with tf.name_scope('encoder'):
     with tf.name_scope('Wd'):
         variable_summaries(encoder._Wd)
     with tf.name_scope('threshold'):
-        variable_summaries(encoder._theta[0])
+        variable_summaries(encoder._theta)
 with tf.name_scope('decoder'):
     variable_summaries(decoder.decoder)
 with tf.name_scope('sparse_code'):
     variable_summaries(encoder.output)
 tf.summary.scalar('encoded_sparsity',
-        tf.reduce_mean(tf.count_nonzero(encoder.output2d, 1)))
+        tf.reduce_mean(tf.count_nonzero(encoder.output, 1)))
 if not args.test:
     if args.sparse_factor:
         tf.summary.scalar('l1_loss', l_sparse)
     tf.summary.scalar('recon_loss', l_rec)
+    tf.summary.scalar('smooth', loss_total_var)
     tf.summary.scalar('total_loss', loss)
 tf.summary.image('input', encoder.input)
 tf.summary.image('output', decoder.recon_image())
@@ -474,6 +413,8 @@ with tf.Session() as sess:
     merged = tf.summary.merge_all()
     train_summ_writer = tf.summary.FileWriter(tensorboard_path + args.name)
     train_summ_writer.add_graph(sess.graph)
+    valid_summ_writer = tf.summary.FileWriter(tensorboard_path + args.name +
+            '_valid')
     if args.load_model:
         if args.load_name != '':
             LOAD_DIR = DIR_PATH + '/logdir/models/' + args.load_name + '/'
@@ -519,7 +460,7 @@ with tf.Session() as sess:
 
             if b_num % 10 == 0:
                 summary = sess.run(merged, feed_dict)
-                train_summ_writer.add_summary(summary, global_step_en.eval())
+                train_summ_writer.add_summary(summary)
 
             if b_num % 10 == 0:
                 valid_loss = 0
@@ -536,9 +477,9 @@ with tf.Session() as sess:
                         mask = (Xv_batch == Yv_batch).astype(float)
                         feed_dict[encd_mask] = mask
 
-                    iter_loss, iter_recon, enc_out = sess.run([loss, l_rec,
-                        encoder.output2d], feed_dict)
-
+                    iter_loss, iter_recon, enc_out, summary  = \
+                            sess.run([loss, l_rec, encoder.output, merged], feed_dict)
+                    valid_summ_writer.add_summary(summary)
                     sp_out_itr += np.count_nonzero(enc_out)/enc_out.shape[0]
                     sp_in_itr += np.count_nonzero(X_batch)/Xv_batch.shape[0]
                     valid_loss += iter_loss
@@ -548,6 +489,7 @@ with tf.Session() as sess:
                 validation_loss.append(valid_loss)
                 valid_sparsity_out.append(sp_out_itr/v_itr)
                 valid_sparsity_in.append(sp_in_itr/v_itr)
+
                 if valid_loss <= np.min(validation_loss):
                     if args.save_model:
                         f_name = MODEL_DIR + 'csc_u{}_'.format(args.unroll_count)
@@ -555,7 +497,9 @@ with tf.Session() as sess:
                         print('saving model at: %s'%f_name) 
                 if len(validation_loss)  > 5:
                     if (valid_loss > validation_loss[-2]).all():
-                        learning_rate_var *= 0.9
+                        learning_rate_var *= 0.5
+                        print('loading model %s'%MODEL_DIR)
+                        saver.restore(sess, tf.train.latest_checkpoint(MODEL_DIR))
                         print('decreasing learning_rate to\
                                 {}'.format(learning_rate_var.eval()))
                 print('valid loss: %f recon loss: %f encoded sparsity: %f' %
@@ -568,7 +512,7 @@ with tf.Session() as sess:
     np.save(decoder_filters_path, decoder_filters)
     print('saved decoder filters at path: %s' % decoder_filters_path)
 
-    test_batch = nextbatch(X=X_test, Y=Y_test, batch_size=500, run_once=True)
+    test_batch = nextbatch(X=X_test, Y=Y_test, batch_size=5, run_once=True)
     test_loss, test_recon_loss = test(encoder, decoder, test_batch, loss)
     if args.test_fruits:
         X_fruit = load_images.load_fruit(args.grayscale)
