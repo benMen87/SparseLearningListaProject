@@ -73,14 +73,12 @@ class LISTAConvDict2d(ApproxSC):
         else:
             self.amount_of_kernals = kernel_count
             self.kernel_size = kernel_size
-            #tf.fill([1, self.patch_dim, self.patch_dim, self.amount_of_kernals], 0.2)
 
             if self._shrinkge_type == 'soft thresh':
                 #TODO: Notice thresh is now shared one for each feture map
-                self._theta = [tf.nn.relu(tf.Variable(tf.random_uniform(shape=[1, self.amount_of_kernals])),
-                                            name='theta')] * unroll_count
-                #self._theta = [tf.nn.relu(tf.Variable(tf.fill([1,
-                #     self.amount_of_kernals], value=0.0)), name='theta')] * unroll_count
+                self._theta = tf.nn.relu(tf.Variable(tf.fill([1, self.amount_of_kernals],
+                    0.1), name='theta'))
+              #       self.amount_of_kernals], value=0.01)), name='theta')] * unroll_count
             elif self._shrinkge_type == 'smooth soft thresh':
 
                 beta = [tf.Variable(tf.fill([1, self.amount_of_kernals], 5.0), name='beta'+str(u))
@@ -91,29 +89,34 @@ class LISTAConvDict2d(ApproxSC):
 
             init_We = tf.nn.l2_normalize(tf.truncated_normal([self.kernel_size, self.kernel_size,
                                           self.input_channels, self.amount_of_kernals]), dim=[0,1])
-            self._We = tf.Variable(0.1 * init_We, name='We')
+            self._We = tf.Variable(init_We, name='We')
             self._Wd = tf.Variable(tf.transpose(tf.reverse(self._We.initialized_value(), [0,1]), [0,1,3,2]), name='We')
 
-    def build_model(self, mask=1):
+    def build_model(self, mask=None):
         """
         mask - In case of inpainting etc.
         """
+        _Wd = tf.nn.l2_normalize(self._Wd, [0,1])
+        _We = (0.1) * tf.nn.l2_normalize(self._We,
+                [0,1])
+
         shrinkge_fn = self._shrinkge()
+        mask = mask if mask is not None else tf.ones_like(self._X)
 
         X = tf.multiply(self._X, mask)
         B = tf.nn.conv2d(
                 X,
-                self._We,
+                _We,
                 strides=[1, 1, 1, 1],
                 padding='SAME', name='bias'
             )
-        self._Z.append(shrinkge_fn(B, self._theta[0], '0'))
+        self._Z.append(shrinkge_fn(B, self._theta, 'Z0'))
         #
         # run unrolling
         for t in range(1, self._unroll_count):
             conv_wd = tf.nn.conv2d(
                         self._Z[-1],
-                        self._Wd,
+                        _Wd,
                         strides=[1, 1, 1, 1],
                         padding='SAME',
                         name='convWd'
@@ -121,14 +124,14 @@ class LISTAConvDict2d(ApproxSC):
             conv_wd = tf.multiply(conv_wd, mask)
 
             conv_we = tf.nn.conv2d(
-                        conv_wd, self._We,
+                        conv_wd, _We,
                         strides=[1, 1, 1, 1],
                         padding='SAME',
                         name='convWe'
                     )
             res = self._Z[-1] - conv_we
             res_add_bias = res + B
-            self._Z.append(shrinkge_fn(res_add_bias, self._theta[t], 'Z'+str(t)))
+            self._Z.append(shrinkge_fn(res_add_bias, self._theta, 'Z'+str(t)))
 
     @property
     def loss(self):
@@ -150,7 +153,7 @@ class LISTAConvDict2d(ApproxSC):
         return self._Wd
 
     @property
-    def output2d(self):
+    def output(self):
         """
         returns array of 2d feature maps
         """
@@ -170,7 +173,7 @@ class LISTAConvDict2d(ApproxSC):
         return self._X
 
     @property
-    def output(self):
+    def output1d(self):
         return tf.reshape(tf.transpose(self._Z[-1], [0, 3, 1, 2]),
                           [-1, self.input_size * self.amount_of_kernals])
 
