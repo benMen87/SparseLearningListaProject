@@ -30,15 +30,15 @@ DATA_DIR = DIR_PATH + '/../../images/'
 DATA_URL = 'http://ai.stanford.edu/~acoates/stl10/stl10_binary.tar.gz'
 
 # paths to the binary train file with image data and label
-TR_DATA_PATH = DIR_PATH + '/data/stl10_binary/train_X.bin'
-TR_LABEL_PATH = DIR_PATH + '/data/stl10_binary/train_y.bin'
+TR_DATA_PATH = DATA_DIR + '/stl10_binary/train_X.bin'
+TR_LABEL_PATH = DATA_DIR + '/stl10_binary/train_y.bin'
 
 # path to binary unlabeld 
-UNLB_DATA_PATH = DIR_PATH + '/../../images/stl10_binary/unlabeled_X.bin'
+UNLB_DATA_PATH = DATA_DIR + '/stl10_binary/unlabeled_X.bin'
 
 # paths to test file with image data and label
-TS_DATA_PATH = DIR_PATH + '/../../images/stl10_binary/test_X.bin'
-TS_LABEL_PATH = DIR_PATH + '/../../images/stl10_binary/test_y.bin'
+TS_DATA_PATH = DATA_DIR + '/stl10_binary/test_X.bin'
+TS_LABEL_PATH = DATA_DIR + '/stl10_binary/test_y.bin'
 
 
 

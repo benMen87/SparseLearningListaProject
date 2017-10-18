@@ -9,11 +9,13 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import scipy.io as scio
+from PIL import Image
+
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))+'/'
 sys.path.append(os.path.abspath(DIR_PATH + '../approx_sparse_coding'))
 sys.path.append(os.path.abspath(DIR_PATH + '../'))
 
-import lista_convdict2d as sparse_encoder 
+import sparse_aed
 from Utils import stl10_input
 from Utils import load_images 
 from Utils import load_berkeley 
@@ -31,7 +33,7 @@ parser.add_argument('-kc', '--kernel_count', default=36, type=int,
                             help='amount of kernel to use in lista_conv')
 parser.add_argument('-u', '--unroll_count', default=10,
                     type=int, help='Amount of Reccurent timesteps for decoder')
-parser.add_argument('--shirnkge_type', default='soft thresh',
+parser.add_argument('--shrinkge_type', default='soft thresh',
                         choices=['soft thresh', 'smooth soft thresh'])
 parser.add_argument('--learning_rate', '-lr', default=0.001, type=float, help='learning rate')
 parser.add_argument('--save_model', dest='save_model', action='store_true')
@@ -41,7 +43,7 @@ parser.add_argument('--name', default='lista_ed', type=str, help='used for\
         creating load/store log dir names')
 parser.add_argument('--load_name', default='', type=str, help='used to\
         load from a model with "name" diffrent from this model name')
-parser.add_argument('--dataset', default='stl10') #, choices=['mnist', 'stl10', 'cifar10'])
+parser.add_argument('--dataset', default='berkeley') #, choices=['mnist', 'stl10', 'cifar10'])
 parser.add_argument('--whiten', action='store_true')
 parser.add_argument('--sparse_factor', '-sf',  default=0.5, type=float)
 parser.add_argument('--middle_loss_factor', '-mf', default=0.1, type=float)
@@ -62,7 +64,6 @@ parser.add_argument('--clip_val', default=5, type=float, help='max value to clip
 
 args = parser.parse_args()
 
-
 ###########################################################
 #                  Pre-Proccess Data Sets 
 ###########################################################
@@ -80,15 +81,15 @@ def add_noise(X, std):
 
 def preprocess_data(X, addnoise=False, noise_sigma=0, inpaint=False,
         keep_prob=0.5, whiten=False):
-    if addnoise:
-        X = add_noise(X, noise_sigma)
     if whiten:
         X -= np.mean(X, axis=(1, 2), keepdims=True)
         X /= np.std(X, axis=(1, 2), keepdims=True)
     else:
         norm = 255 if np.max(X) <= 255 else np.max(X) 
         X = X.astype('float32') / norm
-
+        noise_sigma = float(noise_sigma) / norm
+    if addnoise:
+        X = add_noise(X, noise_sigma)
     if (len(X.shape) == 3 and not args.grayscale) or (len(X.shape) == 2 and args.grayscale):
         X = X[..., np.newaxis]
 
@@ -113,9 +114,20 @@ if args.dataset == 'stl10':  # Data set with unlabeld too large cant loadfully t
 elif args.dataset == 'berkeley':
     X_train, X_test = load_berkeley.load(args.grayscale)
     np.random.shuffle(X_train)
+elif args.dataset == 'pascal':
+    path = load_berkeley.IMGSPATH + 'psacal_gray.npz'
+    X_train, X_test = load_berkeley.load(args.grayscale, path)
+    np.random.shuffle(X_train)
 else: # dataset is a path of imags to load
     X_test = load_images.load(args.dataset, args.grayscale)
     print(X_test.shape)
+    ############ TEMP REMOVE ###########
+    #from scipy.ndimage.interpolation import shift as  sci_shift
+    #shifts = [[0,3,3,0], [0,-3,-3,0], [0,0,3,0], [0,3,0,0], [0,-3,0,0],
+    #  [0,0,-3,0]]
+    #for shift in shifts:
+    #    X_test = np.append(X_test, sci_shift(X_test, shift), axis=0)
+    #np.save('lena_shift_debug', X_test)
 
 noise_sigma = 20
 
@@ -124,6 +136,8 @@ Y_test =  np.empty(shape=X_test.shape)
 Y_test[:] = X_test[:]
 X_test = preprocess_data(X_test, args.add_noise, noise_sigma, args.inpaint,
         args.inpaint_keep_prob, args.whiten)
+
+print('avg mean %f'%np.mean(X_test))
 Y_test = preprocess_data(Y_test, whiten=args.whiten)
 input_shape = X_test.shape[1:]
 
@@ -151,15 +165,15 @@ if not args.test:
 #   Plot and save test image
 ######################################################
 def savetstfig(sess, encoder, decoder, inputim, targetim, fname):
-
+    print('^'*30)
     Xhat = decoder.recon_image()
     feed_dict = {encoder.input: inputim}
     if args.inpaint:
         feed_dict[encd_mask] =  (inputim == targetim).astype(float)
-    Z, im_hat = sess.run([encoder.output2d, Xhat], feed_dict)
+    Z, im_hat = sess.run([encoder.output, Xhat], feed_dict)
     
-    im_hat /= np.max(im_hat)
-    # np.clip(im_hat, 0, 1)  # clip values
+    # im_hat /= np.max(im_hat)
+    np.clip(im_hat, 0, 1)  # clip values
     example_ims = DIR_PATH + 'logdir/data/' + fname
     f, axarr = plt.subplots(2, 2)
     np.savez(example_ims, X=inputim, Y=targetim, Z=Z, IM_hat=im_hat)
@@ -187,12 +201,7 @@ def savetstfig(sess, encoder, decoder, inputim, targetim, fname):
     plt.close()
 
     #### TEMP remove ####
-    fig = plt.figure(frameon=False)
-    ax = plt.Axes(fig, [0., 0., 1., 1.])
-    ax.set_axis_off()
-    fig.add_axes(ax)
-    ax.imshow(np.squeeze(im_hat), cmap=cmap, aspect='normal')
-    fig.savefig('result_im', bbox_inches='tight', pad_inches=0)
+    Image.fromarray(np.squeeze(np.uint8(im_hat * 255))).save('result.png')
 
     fig = plt.figure(frameon=False)
     ax = plt.Axes(fig, [0., 0., 1., 1.])
@@ -208,8 +217,6 @@ def test(encoder, decoder, batch, loss=None):
     test_loss = 0
     recon_loss = 0
     test_iter = 0
-    print('batch size {}'.format(args.batch_size))
-
     for X_batch, Y_batch in test_batch:
 
         feed_dict = {encoder.input: X_batch, decoder.target: Y_batch}
@@ -219,13 +226,14 @@ def test(encoder, decoder, batch, loss=None):
         test_loss += sess.run(loss, feed_dict)
         recon_loss += sess.run(l_rec, feed_dict)
         test_iter += 1
-
+    
+    print('test size %d'%test_iter)
     if test_iter:
         test_loss, recon_loss = test_loss/test_iter, recon_loss/test_iter
 
     # for debug save We/Wd
     We_Wd = DIR_PATH + 'logdir/data/We_Wd'
-    We, Wd, theta = sess.run([encoder._We, encoder._Wd, encoder._theta[0]])
+    We, Wd, theta = sess.run([encoder.We, encoder.Wd, encoder._theta[0]])
     np.savez(We_Wd, Wd=Wd, We=We, theta=theta)
 
     # plot example image
@@ -242,7 +250,9 @@ def test(encoder, decoder, batch, loss=None):
 #######################################################
 #   Log-network for tensorboard
 #######################################################
-tensorboard_path = DIR_PATH + 'logdir/tb/'
+tensorboard_path = '/data/hillel/tb/' +  args.name + '/'
+if not os.path.isdir(tensorboard_path):
+        os.mkdir(tensorboard_path)
 
 def variable_summaries(var):
     """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
@@ -259,111 +269,43 @@ def variable_summaries(var):
 ########################################################
 #       Build Models - Sparse Encoder Decoder
 ########################################################
-
-# Define decoder class
-class Decoder():
-    def __init__(self, init_vals, output_shape):
-        self.decoder = [tf.Variable(init_val, name='decoder') for init_val in init_vals]
-        self.decoder = [tf.nn.l2_normalize(ker, dim=[0, 1], name='normilized_dict') for ker in self.decoder] # keep decoder atoms with l2 norm of 1
-        self.target = tf.placeholder(tf.float32, shape=output_shape)
-        self.output = []
-
-    def reconstruct(self, encoder_out):
-        return tf.nn.conv2d(encoder_out, self.decoder, strides=[1, 1, 1, 1], padding='SAME')
-
-    def build_model(self, encoded_in):
-         """Can pass multiple inputs at diffrent time state of encoder"""
-         out = tf.concate([self.reconstruct(enc_in) for enc_in in  encoded_in], axis=-1)
-         self.output = tf.reduce_sum(out, -1)
-
-    def decoder_outall(self):
-        return self.output
-
-    def recon_image(self):
-        return self.output[-1]
-
-    def recon_loss_layer_i(self, input_index, dist_name='l2', name='recon_loss'):
-        if input_index > len(self.output):
-            raise IndexError('layer index out of bounds')
-        if dist_name == 'l2':
-            dist_fn = tf.square
-        elif dist_name == 'l1':
-            dist_fn = tf.abs
-
-        recon = self.output[input_index]
-        return tf.reduce_mean(tf.reduce_sum(dist_fn(self.target - recon), [1, 2]), name=name)
-
-
-
-#
-# build encoder-decoder
-
-init_de = None
-init_en_dict = {}
-if args.load_pretrained_dict:
-    print('loading dict')
-    trained_dict = np.load(DIR_PATH + 'pretrained_dict/learned_dict.npy')
-    init_de = trained_dict.astype('float32')
-    init_en_dict['Wd'] = init_de
-    init_en_dict['We'] = 0.01 * np.transpose(np.flip(np.flip(init_de, axis=0), axis=1), [0, 1, 3, 2])
-
-mdl_i = args.unroll_count // 2
-
-with tf.variable_scope('encoder'):
-    encoder = sparse_encoder.LISTAConvDict2d(inputshape=input_shape,
-                                             unroll_count=args.unroll_count,
-                                             L=1, batch_size=args.batch_size,
-                                             kernel_size=args.kernel_size,
-                                             shrinkge_type=args.shirnkge_type,
-                                             kernel_count=args.kernel_count,
-                                             init_params_dict=init_en_dict,channel_size=input_shape[-1])
-    if args.inpaint:
-        encd_mask = tf.placeholder(tf.float32, shape=encoder.input2D.shape)
-    else:
-        encd_mask = 1
-
-encoder.build_model(encd_mask)
-decoder_trainable = not args.dont_train_dict
-with tf.variable_scope('decoder'):
-    init_de = [res_wd.initialized_value() for res_wd in  encoder._Wd]
-    output_shape =[None] + list(input_shape)
-    decoder = Decoder(init_de, output_shape=output_shape)
-    deco_input = [encoder.output2d_i(mdl_i), encoder.output2d]
-    decoder.build_model(deco_input)
+encoder, decoder, encd_mask = sparse_aed.build_model(args, input_shape)
 
 
 # l2-loss with index -1 is reconstruction of final encoding 
 # l2-loss with index 0 is of indermidate encode
-l_rec  = decoder.recon_loss_layer_i(-1, args.recon_loss, 'recon_loss') + \
-         args.middle_loss_factor * \
-         decoder.recon_loss_layer_i(0, args.recon_loss, 'recon_loss_stage_%d'%mdl_i)
-loss = l_rec
+l_rec  = decoder.recon_loss_layer_i(-1, args.recon_loss, 'recon_loss')
+         #args.middle_loss_factor * \
+         #decoder.recon_loss_layer_i(0, args.recon_loss, 'recon_loss_stage_%d'%mdl_i)
+loss_total_var = tf.reduce_mean(tf.image.total_variation(decoder.recon_image()))
+loss = l_rec + 0 * loss_total_var
 #
 # LOSS
 if args.sparse_factor:
-    l_sparse = tf.reduce_mean(tf.reduce_sum(tf.abs(encoder.output2d), [1, 2, 3]), name='l1')
+    l_sparse = tf.reduce_mean(tf.reduce_sum(tf.abs(encoder.output), [1, 2, 3]), name='l1')
     loss += args.sparse_factor * l_sparse
 
 #######################################################
 # Add vars to summary
 #######################################################
-with tf.name_scope('encoder'):
-    with tf.name_scope('We'):
-        variable_summaries(encoder._We)
-    with tf.name_scope('Wd'):
-        variable_summaries(encoder._Wd)
-    with tf.name_scope('threshold'):
-        variable_summaries(encoder._theta[0])
-with tf.name_scope('decoder'):
-    variable_summaries(decoder.decoder)
-with tf.name_scope('sparse_code'):
-    variable_summaries(encoder.output)
-tf.summary.scalar('encoded_sparsity',
-        tf.reduce_mean(tf.count_nonzero(encoder.output2d, 1)))
+#with tf.name_scope('encoder'):
+#    with tf.name_scope('We'):
+#        variable_summaries(encoder._We)
+#    with tf.name_scope('Wd'):
+#        variable_summaries(encoder._Wd)
+#    with tf.name_scope('threshold'):
+#        variable_summaries(encoder._theta[0])
+#with tf.name_scope('decoder'):
+#    variable_summaries(decoder.decoder)
+#with tf.name_scope('sparse_code'):
+#    variable_summaries(encoder.output)
+#tf.summary.scalar('encoded_sparsity',
+#        tf.reduce_mean(tf.count_nonzero(encoder.output2d, 1)))
 if not args.test:
     if args.sparse_factor:
         tf.summary.scalar('l1_loss', l_sparse)
     tf.summary.scalar('recon_loss', l_rec)
+    tf.summary.scalar('smooth loss', loss_total_var)
     tf.summary.scalar('total_loss', loss)
 tf.summary.image('input', encoder.input)
 tf.summary.image('output', decoder.recon_image())
@@ -474,6 +416,7 @@ with tf.Session() as sess:
     merged = tf.summary.merge_all()
     train_summ_writer = tf.summary.FileWriter(tensorboard_path + args.name)
     train_summ_writer.add_graph(sess.graph)
+    valid_summ_writer = tf.summary.FileWriter(tensorboard_path + args.name + '_valid')
     if args.load_model:
         if args.load_name != '':
             LOAD_DIR = DIR_PATH + '/logdir/models/' + args.load_name + '/'
@@ -536,9 +479,9 @@ with tf.Session() as sess:
                         mask = (Xv_batch == Yv_batch).astype(float)
                         feed_dict[encd_mask] = mask
 
-                    iter_loss, iter_recon, enc_out = sess.run([loss, l_rec,
-                        encoder.output2d], feed_dict)
-
+                    iter_loss, iter_recon, enc_out, summary = sess.run([loss, l_rec,
+                        encoder.output, merged], feed_dict)
+                    valid_summ_writer.add_summary(summary)
                     sp_out_itr += np.count_nonzero(enc_out)/enc_out.shape[0]
                     sp_in_itr += np.count_nonzero(X_batch)/Xv_batch.shape[0]
                     valid_loss += iter_loss
@@ -554,8 +497,10 @@ with tf.Session() as sess:
                         saver.save(sess, f_name, global_step=global_step_en)
                         print('saving model at: %s'%f_name) 
                 if len(validation_loss)  > 5:
-                    if (valid_loss > validation_loss[-2]).all():
+                    if (valid_loss > validation_loss[-5:]).all():
                         learning_rate_var *= 0.9
+                        print('loading model %s'%MODEL_DIR)
+                        saver.restore(sess, tf.train.latest_checkpoint(MODEL_DIR))
                         print('decreasing learning_rate to\
                                 {}'.format(learning_rate_var.eval()))
                 print('valid loss: %f recon loss: %f encoded sparsity: %f' %
@@ -563,12 +508,12 @@ with tf.Session() as sess:
         print('epoch %d: loss val:%f' % (epoch, args.batch_size  * epoch_loss / X_train.shape[0]))
 
     print('='*40)
-    decoder_filters = decoder.decoder.eval()
+    decoder_filters = [d.eval() for d in decoder.decoder]
     decoder_filters_path = DIR_PATH + 'logdir/data/decoder_filters'
     np.save(decoder_filters_path, decoder_filters)
     print('saved decoder filters at path: %s' % decoder_filters_path)
 
-    test_batch = nextbatch(X=X_test, Y=Y_test, batch_size=500, run_once=True)
+    test_batch = nextbatch(X=X_test, Y=Y_test, batch_size=10, run_once=True)
     test_loss, test_recon_loss = test(encoder, decoder, test_batch, loss)
     if args.test_fruits:
         X_fruit = load_images.load_fruit(args.grayscale)

@@ -1,0 +1,2 @@
+model_checkpoint_path: "/home/hillel/projects/lista_multi_res/SparseLearningListaProject/code/encoder_decoder//logdir/models/denoiseMultiResU15_HiRes_pascal_noDecoderL2Norm_cont_sf000001/csc_u15_-13963"
+all_model_checkpoint_paths: "/home/hillel/projects/lista_multi_res/SparseLearningListaProject/code/encoder_decoder//logdir/models/denoiseMultiResU15_HiRes_pascal_noDecoderL2Norm_cont_sf000001/csc_u15_-13963"

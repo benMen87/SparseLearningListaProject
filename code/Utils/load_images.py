@@ -21,7 +21,7 @@ def load(searchpath, grayscale=False):
     
     X = []
     for im_path in glob.glob(searchpath):
-        X.append(np.array(Image.open(im_path)))
+        X.append(np.array(Image.open(im_path).convert("L")))
         # X.append(np.array(resizeimage.resize_cover(Image.open(im_path), [96, 96, -1])))
     X = np.array(X)
 
@@ -29,7 +29,7 @@ def load(searchpath, grayscale=False):
         X = X[...,np.newaxis]
 
     if grayscale:
-        X = rgb2gray(X)
+        # X = rgb2gray(X)
         if len(X.shape) == 2:
             X = X[..., np.newaxis]
     return np.array(X)

@@ -1,0 +1,2 @@
+model_checkpoint_path: "/home/hillel/projects/lista_multi_res/SparseLearningListaProject/code/encoder_decoder//logdir/models/pascalDB_multires_totalvar/csc_u15_-10"
+all_model_checkpoint_paths: "/home/hillel/projects/lista_multi_res/SparseLearningListaProject/code/encoder_decoder//logdir/models/pascalDB_multires_totalvar/csc_u15_-10"

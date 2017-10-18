@@ -74,25 +74,34 @@ class LISTAConvDict2d(ApproxSC):
             if self._shrinkge_type == 'soft thresh':
                 #TODO: Notice thresh is now shared one for each feture map
                 self._theta = [tf.nn.relu(tf.Variable(tf.fill([1,
-                     self.amount_of_kernals], value=0.1)), name='theta')] * unroll_count
-            # Multi-resolution use 3 5 and 7 kernals
+                     self.amount_of_kernals], value=0.0025)), name='theta')] * unroll_count
+            # Multi-resolution use 5 7 and 11 kernals
             self._amount_of_resolutions = 3
-            init_We_3 = tf.nn.l2_normalize(tf.truncated_normal([3, 3,
-                                          self.input_channels, self.amount_of_kernals //self._amount_of_resolutions]), dim=[0,1])
-            init_We_5 = tf.nn.l2_normalize(tf.truncated_normal([5, 5,
-                                          self.input_channels, self.amount_of_kernals // self._amount_of_resolutions]), dim=[0,1])
-            init_We_7  = tf.nn.l2_normalize(tf.truncated_normal([7, 7,
-                                          self.input_channels, self.amount_of_kernals // self._amount_of_resolutions]), dim=[0,1])
+            init_W_3 = tf.truncated_normal([5, 5,
+                                          self.input_channels,
+                                          self.amount_of_kernals
+                                          //self._amount_of_resolutions])
+            init_W_5 = tf.truncated_normal([7, 7,
+                                          self.input_channels,
+                                          self.amount_of_kernals //
+                                          self._amount_of_resolutions])
+            init_W_7  = tf.truncated_normal([11, 11,
+                                          self.input_channels,
+                                          self.amount_of_kernals //
+                                          self._amount_of_resolutions])
 
 
-            self._We_3 = tf.Variable(0.1 * init_We_3, name='We3')
-            self._We_5 = tf.Variable(0.1 * init_We_5, name='We5')
-            self._We_7 = tf.Variable(0.1 * init_We_7, name='We7')
+            self._We_3 = tf.Variable(init_W_3, name='We3')
+            self._We_5 = tf.Variable(init_W_5, name='We5')
+            self._We_7 = tf.Variable(init_W_7, name='We7')
 
 
-            self._Wd_3 = tf.Variable(tf.transpose(tf.reverse(self._We_3.initialized_value(), [0,1]), [0,1,3,2]), name='We3')
-            self._Wd_5 = tf.Variable(tf.transpose(tf.reverse(self._We_5.initialized_value(), [0,1]), [0,1,3,2]), name='We5')
-            self._Wd_7 = tf.Variable(tf.transpose(tf.reverse(self._We_7.initialized_value(), [0,1]), [0,1,3,2]), name='We7')
+            self._Wd_3 = tf.Variable(tf.transpose(tf.reverse(self._We_3.initialized_value(),
+                [0,1]), [0,1,3,2]), name='We3')
+            self._Wd_5 = tf.Variable(tf.transpose(tf.reverse(self._We_5.initialized_value(),
+                [0,1]), [0,1,3,2]), name='We5')
+            self._Wd_7 = tf.Variable(tf.transpose(tf.reverse(self._We_7.initialized_value(),
+                [0,1]), [0,1,3,2]), name='We7')
 
     def conv2d(self, _input, _kernel, name='conv2d'):
         res = tf.nn.conv2d(
@@ -105,26 +114,38 @@ class LISTAConvDict2d(ApproxSC):
 
     def multires_conv_we(self, _input, name="multi_res_we"):
         result = []
-        We = [self._We_3, self._We_5, self._We_7]
+        # Normalize filters
+        _We_3 = ((1.25 / self.unroll_count)**2) *\
+            tf.nn.l2_normalize(self._We_3, [0, 1])
+        _We_5 = ((1.25 / self.unroll_count)**2) *\
+            tf.nn.l2_normalize(self._We_5, [0,1])
+        _We_7 = ((1.25 / self.unroll_count)**2) *\
+            tf.nn.l2_normalize(self._We_7, [0,1])
+        
+        We = [_We_3, _We_5, _We_7]
 
         for ker in We:
-            result.append(self.conv2d(_input, ker))
+            reso_result = self.conv2d(_input, ker)
+            result.append(reso_result)
         
         result = tf.concat(result, axis=-1)  # from list to tensor
         return result
 
 
     def multires_conv_wd(self, _input, name="multi_res_wd"):
-        Wd = [self._Wd_3, self._Wd_5, self._Wd_7]
-        per_res_channels = self.amount_of_kernals // self._amount_of_resolutions
-        result_resolution_list = []
-        last_axis = len(_input.shape) - 1
-        _input = tf.split(_input, [per_res_channel, per_res_channel, per_res_channel], axis=last_axis)  # from tensor to list
+        _Wd_3 = tf.nn.l2_normalize(self._Wd_3, [0, 1])
+        _Wd_5 = tf.nn.l2_normalize(self._Wd_5, [0,1])
+        _Wd_7 = tf.nn.l2_normalize(self._Wd_7, [0,1])
 
-        for resolution_feature_map, ker in enumerate(_input, Wd):
-            result_resolution_list.append(self.conv2d(resolution_feature_map, ker))
+        Wd = [_Wd_3, _Wd_5, _Wd_7]
+        per_res_channels = self.amount_of_kernals // self._amount_of_resolutions
+        result = 0
+        last_axis = len(_input.shape) - 1
+        _input = tf.split(_input, [per_res_channels, per_res_channels, per_res_channels], axis=last_axis)  # from tensor to list
+
+        for resolution_feature_map, ker in zip(_input, Wd):
+            result +=  self.conv2d(resolution_feature_map, ker)
         
-        result = tf.reduce_sum(result_resolution_list, axis=3)
         return result
             
     def build_model(self, mask=1):
@@ -132,22 +153,21 @@ class LISTAConvDict2d(ApproxSC):
         mask - In case of inpainting etc.
         """
         shrinkge_fn = self._shrinkge()
-        Wd = [self._Wd_3, self._Wd_5, self._Wd_7]
 
         X = tf.multiply(self._X, mask)
-        B = self.multires_conv_we(X) 
-        self._Z.append(shrinkge_fn(B, self._theta[0], '0'))
+        B = self.multires_conv_we(X)
+        self._Z = shrinkge_fn(B, self._theta[0], 'Z0')
 
         #
         # run unrolling
         for t in range(1, self._unroll_count):
-            conv_wd = multires_conv2d( self._Z[-1], Wd, concat_axis=-2, name='convWd')
+            conv_wd = self.multires_conv_wd(self._Z, name='convWd')
             conv_wd = tf.multiply(conv_wd, mask)
 
             conv_we = self.multires_conv_we(conv_wd, name='convWe')
-            res = self._Z[-1] - conv_we
+            res = self._Z - conv_we
             res_add_bias = res + B
-            self._Z.append(shrinkge_fn(res_add_bias, self._theta[t], 'Z'+str(t)))
+            self._Z = shrinkge_fn(res_add_bias, self._theta[t], 'Z'+str(t))
 
     @property
     def loss(self):
@@ -173,11 +193,11 @@ class LISTAConvDict2d(ApproxSC):
         return [self._We_3, self._We_5, self._We_7] 
 
     @property
-    def output2d(self):
+    def output(self):
         """
         returns array of 2d feature maps
         """
-        return self._Z[-1]
+        return self._Z
 
     def output2d_i(self, i):
         """

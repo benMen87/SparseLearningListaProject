@@ -5,12 +5,15 @@ from PIL import Image
 import os
 import sys
 
+
+IMGSPATH = '/home/hillel/projects/SparseLearningListaProject/images/'
 BSDSPATH='/home/hillel/projects/SparseLearningListaProject/images/BSR_bsds500.tgz' 
 NP_BSDSPATH_GRAY='/home/hillel/projects/SparseLearningListaProject/images/ber_nex_321X321.npz' 
 
-def load(grayscale):
+
+def load(grayscale, path=NP_BSDSPATH_GRAY):
     if grayscale:
-        DB = np.load(NP_BSDSPATH_GRAY)
+        DB = np.load(path)
     else:
         raise NotImplementedError('creat an npz dict of RGB imgs')
 
@@ -18,15 +21,16 @@ def load(grayscale):
     return np.concatenate((DB['TRAIN'], DB['TEST']), axis=0), DB['VAL']
 
 
-def build_dataset(pathtosave, rgb2gray):
+def build_dataset(pathtosave, rgb2gray, ims_path=BSDSPATH):
 
     X_train = []
     X_test = []
     X_val = []
     dx = dy = 321
 
-    db_p = tar.open(BSDSPATH)
+    db_p = tar.open(ims_path)
     for f_info in db_p.getmembers():
+        print('size %d'%len(db_p.getmember()))
         if f_info.name.endswith('.jpg'):
             img_fp = db_p.extractfile(f_info)
             I = Image.open(img_fp)
@@ -53,5 +57,5 @@ def build_dataset(pathtosave, rgb2gray):
 
     if not os.path.isdir(pathtosave):
         os.makedirs(pathtosave)
-    np.savez(pathtosave + 'berkeley_db_321X321', TRAIN=X_train, TEST=X_test, VAL=X_val)
+    np.savez(pathtosave, TRAIN=X_train, TEST=X_test, VAL=X_val)
 
