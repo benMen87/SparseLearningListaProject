@@ -21,11 +21,12 @@ class ApproxSC(object):
         #
         # graph i/o
         b_dim = self.train_batch_size
-        b_dim = None if b_dim > 1 else b_dim
+        b_dim = None 
         if input2d:
-            dim_size = np.int(np.sqrt(self.input_size))
+            # dim_size = np.int(np.sqrt(self.input_size))
             # self._X = tf.placeholder(tf.float32, shape=(b_dim, dim_size, dim_size, self.input_channels),
             #                          name='X')
+            pass
         else:
             self._X = tf.placeholder(tf.float32, shape=(b_dim, self.input_size),
                                      name='X')

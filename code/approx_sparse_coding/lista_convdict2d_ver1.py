@@ -24,13 +24,11 @@ class LISTAConvDict2d(ApproxSC):
             inputshape: Input X is encoded using conv2D(We, X).
             unroll_size: Amount of times to repeat lcod block.
         """
-
         super(LISTAConvDict2d, self).__init__(inputshape, unroll_count, input2d=True,
                                               shrinkge_type=shrinkge_type, shared_threshold=shared_threshold,
                                               batch_size=batch_size, channel_size=channel_size)
-
         self.inputshape = inputshape
-        self._X = tf.placeholder(tf.float32, shape=(None, None, None, self.input_channels), name='X')
+        self._X = tf.placeholder(tf.float32, shape=(None, self.inputshape[0], self.inputshape[1], self.input_channels), name='X')
         #
         # model variables
         if not init_params_dict and filter_arr is not None :
@@ -50,7 +48,7 @@ class LISTAConvDict2d(ApproxSC):
             filter_arr = np.expand_dims(filter_arr, axis=-1)
             filter_arr = np.transpose(filter_arr, [1,2,0,3])
             self._We = (1/L)*tf.Variable(flipfilter_arr, name='We', dtype=tf.float32)
-            self._Wd = tf.Variable(filter_arr, name='Wd', dtype=tf.float32)
+            self._S = tf.Variable(filter_arr, name='S', dtype=tf.float32)
 
         elif init_params_dict:
             self.kernel_size = init_params_dict['Wd'].shape[1]
@@ -66,18 +64,19 @@ class LISTAConvDict2d(ApproxSC):
             else:
                 raise NotImplementedError('shirnkge type not supported')
 
-            self._Wd = tf.Variable(init_params_dict['Wd'],
+            self._S = tf.Variable(init_params_dict['Wd'],
                                    name='Wd', dtype=tf.float32)
             self._We = tf.Variable(init_params_dict['We'],
                                    name='We', dtype=tf.float32)
         else:
             self.amount_of_kernals = kernel_count
             self.kernel_size = kernel_size
+            #tf.fill([1, self.patch_dim, self.patch_dim, self.amount_of_kernals], 0.2)
 
             if self._shrinkge_type == 'soft thresh':
                 #TODO: Notice thresh is now shared one for each feture map
                 self._theta = tf.nn.relu(tf.Variable(tf.fill([1, self.amount_of_kernals],
-                    0.05), name='theta'))
+                    0.01), name='theta'))
               #       self.amount_of_kernals], value=0.01)), name='theta')] * unroll_count
             elif self._shrinkge_type == 'smooth soft thresh':
 
@@ -89,67 +88,40 @@ class LISTAConvDict2d(ApproxSC):
 
             init_We = tf.nn.l2_normalize(tf.truncated_normal([self.kernel_size, self.kernel_size,
                                           self.input_channels, self.amount_of_kernals]), dim=[0,1])
+            init_S = tf.truncated_normal([self.kernel_size, self.kernel_size,
+                                          self.amount_of_kernals, self.amount_of_kernals])
             self._We = tf.Variable(init_We, name='We')
-            self._Wd = tf.Variable(tf.transpose(tf.reverse(self._We.initialized_value(), [0,1]), [0,1,3,2]), name='We')
-
-    def dilate_conv2d(_value, _filters, _name, _rate):
-        res = tf.nn.atrous_conv2d(
-                _value,
-                _filters,
-                rate=_rate,
-                padding='SAME',
-                name=_name
-            )
-
-    def conv2d(self, _value, _filters, _name, _dilate=False, _rate=[1, 2, 3]):
-        if _dilate:
-            dilate_conv2d(_value, _filters, _name, 3)
-        else:
-            res = tf.nn.conv2d(
-                _value,
-                _filters,
-                strides=[1, 1, 1, 1],
-                padding='SAME',
-                name=_name
-            )
-        return res
+            self._S = tf.Variable(init_S, name='S')
 
     def build_model(self, mask=None):
         """
         mask - In case of inpainting etc.
         """
-        _Wd = tf.nn.l2_normalize(self._Wd, [0,1])
-        _We = (0.1) * tf.nn.l2_normalize(self._We,
-                [0,1])
+        _S = self._S
+        _We = tf.nn.l2_normalize(self._We, [0,1])
 
         shrinkge_fn = self._shrinkge()
         mask = mask if mask is not None else tf.ones_like(self._X)
 
         X = tf.multiply(self._X, mask)
-        B = self.conv2d(
-            _value=X,
-            _filters=_We,
-            _name='bias'
-            ) 
+        B = tf.nn.conv2d(
+                X,
+                _We,
+                strides=[1, 1, 1, 1],
+                padding='SAME', name='bias'
+            )
         self._Z.append(shrinkge_fn(B, self._theta, 'Z0'))
         #
         # run unrolling
         for t in range(1, self._unroll_count):
-            conv_wd = self.conv2d(
-                        _value=self._Z[-1],
-                        _filters=_Wd,
-                        _name='convWd'
-                    )
-
-            conv_wd = tf.multiply(conv_wd, mask)
-
-            conv_we = self.conv2d(
-                        _value=conv_wd,
-                        _filters=_We,
-                        _name='convWe'
-                    )
-            res = self._Z[-1] - conv_we
-            res_add_bias = res + B
+            conv_sc = tf.nn.conv2d(
+                        self._Z[-1],
+                        _S,
+                        strides=[1, 1, 1, 1],
+                        padding='SAME',
+                        name='conv_sc'
+            )
+            res_add_bias = conv_sc + B
             self._Z.append(shrinkge_fn(res_add_bias, self._theta, 'Z'+str(t)))
 
     @property
@@ -169,7 +141,7 @@ class LISTAConvDict2d(ApproxSC):
 
     @property
     def Wd(self):
-        return self._Wd
+        return self._S
 
     @property
     def output(self):

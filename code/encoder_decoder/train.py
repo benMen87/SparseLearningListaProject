@@ -17,7 +17,8 @@ sys.path.append(os.path.abspath(DIR_PATH + '../'))
 import sparse_aed
 from Utils import stl10_input
 from Utils import load_images 
-from Utils import load_berkeley 
+from Utils import load_berkeley
+from Utils import ms_ssim
 from Utils.psnr import psnr as psnr
 
 parser = argparse.ArgumentParser(description='Sparse encoder decoder model')
@@ -30,6 +31,7 @@ parser.add_argument('-ks', '--kernel_size', default=5, type=int,
                             help='kernel size to be used in lista_conv')
 parser.add_argument('-kc', '--kernel_count', default=36, type=int,
                             help='amount of kernel to use in lista_conv')
+parser.add_argument('--dilate', '-dl', action='store_true')
 parser.add_argument('-u', '--unroll_count', default=10,
                     type=int, help='Amount of Reccurent timesteps for decoder')
 parser.add_argument('--shrinkge_type', default='soft thresh',
@@ -42,9 +44,12 @@ parser.add_argument('--name', default='lista_ed', type=str, help='used for\
         creating load/store log dir names')
 parser.add_argument('--load_name', default='', type=str, help='used to\
         load from a model with "name" diffrent from this model name')
-parser.add_argument('--dataset', default='/home/hillel/projects/FastFlexibleCSC_Code_Heide2015/datasets/Images/fruit_100_100/4.jpg') #, choices=['mnist', 'stl10', 'cifar10'])
+parser.add_argument('--dataset', default='city_fruit') #'mnist','stl10', 'cifar10', 'pascal'
 parser.add_argument('--whiten', action='store_true')
 parser.add_argument('--sparse_factor', '-sf',  default=0.5, type=float)
+parser.add_argument('--total_variation', '-tv',  default=0.0, type=float)
+parser.add_argument('--recon_factor', '-rf',  default=1.0, type=float)
+parser.add_argument('--ms_ssim', '-ms',  default=0.0, type=float)
 parser.add_argument('--middle_loss_factor', '-mf', default=0.1, type=float)
 parser.add_argument('--load_pretrained_dict', action='store_true', help='inilize dict with pre traindict in "./pretrained_dict" dir')
 parser.add_argument('--dont_train_dict', '-dt', action='store_true',  help='how many epochs to wait train dict -1 means dont train')
@@ -85,7 +90,8 @@ def preprocess_data(X, addnoise=False, noise_sigma=0, inpaint=False,
         X -= np.mean(X, axis=(1, 2), keepdims=True)
         X /= np.std(X, axis=(1, 2), keepdims=True)
     else:
-        norm = 255 if np.max(X) <= 255 else np.max(X) 
+        norm = 255 if 200 < np.max(X) <= 255  else np.max(X) 
+        print('norm is {}'.format(norm))
         X = X.astype('float32') / norm
         noise_sigma = float(noise_sigma) / norm
     if addnoise:
@@ -118,6 +124,11 @@ elif args.dataset == 'berkeley':
 elif args.dataset == 'pascal':
     path = load_berkeley.IMGSPATH + 'psacal_gray.npz'
     X_train, X_test = load_berkeley.load(args.grayscale, path)
+    np.random.shuffle(X_train)
+elif args.dataset == 'city_fruit':
+    D = np.load('/data/hillel/data_sets/city_fruit.npz')
+    X_train, X_test = D['TRAIN'], D['TEST']
+    X_train = np.concatenate((X_train, X_train[:,::-1,...], X_train[...,::-1,:], X_train[:,::-1, ::-1,:]))
     np.random.shuffle(X_train)
 else: # dataset is a path of imags to load
     X_test = load_images.load(args.dataset, args.grayscale)
@@ -269,17 +280,30 @@ def variable_summaries(var):
 ########################################################
 encoder, decoder, encd_mask = sparse_aed.build_model(args, input_shape)
 
-# l2-loss with index -1 is reconstruction of final encoding 
-# l2-loss with index 0 is of indermidate encode
-l_rec  = decoder.recon_loss_layer_i(-1, encd_mask, args.recon_loss, 'recon_loss')
-         #args.middle_loss_factor * \
-         #decoder.recon_loss_layer_i(mdl_i, args.recon_loss, 'recon_loss_stage_%d'%mdl_i)
-loss_total_var =  tf.reduce_mean(tf.image.total_variation(decoder.recon_image()))
-loss = l_rec + 0 * loss_total_var
+
 #
 # LOSS
+
+# l2-loss with index -1 is reconstruction of final encoding 
+# l2-loss with index 0 is of indermidate encode
+l_rec  = (1.0 / (input_shape[0]*input_shape[1])) * \
+            decoder.recon_loss_layer_i(-1, encd_mask, args.recon_loss, 'recon_loss')
+         #args.middle_loss_factor * \
+         #decoder.recon_loss_layer_i(mdl_i, args.recon_loss, 'recon_loss_stage_%d'%mdl_i)
+loss = args.recon_factor * l_rec
+half_ker = args.kernel_size // 2
+if args.total_variation:
+    loss_total_var =  tf.reduce_mean(tf.image.total_variation(decoder.recon_image()))
+    loss += args.total_variation * loss_total_var
+if args.ms_ssim:
+    _ms_ssim = ms_ssim.tf_ms_ssim(
+            decoder.target[:,half_ker:-half_ker,half_ker:-half_ker,...],
+            decoder.recon_image()[:,half_ker:-half_ker,half_ker:-half_ker,...], level=4
+            )
+    loss_ms_ssim = (1 - _ms_ssim)
+    loss +=  args.ms_ssim * loss_ms_ssim
 if args.sparse_factor:
-    l_sparse = tf.reduce_mean(tf.reduce_sum(tf.abs(encoder.output), [1, 2, 3]), name='l1')
+    l_sparse = tf.reduce_mean(tf.abs(encoder.output), name='l1')
     loss += args.sparse_factor * l_sparse
 
 #######################################################
@@ -302,7 +326,9 @@ if not args.test:
     if args.sparse_factor:
         tf.summary.scalar('l1_loss', l_sparse)
     tf.summary.scalar('recon_loss', l_rec)
-    tf.summary.scalar('smooth', loss_total_var)
+    if args.total_variation:
+        tf.summary.scalar('smooth', loss_total_var)
+    tf.summary.scalar('ms_ssim', loss_ms_ssim)
     tf.summary.scalar('total_loss', loss)
 tf.summary.image('input', encoder.input)
 tf.summary.image('output', decoder.recon_image())
@@ -344,29 +370,30 @@ def get_opt(name, lr=0.001, momentum=0.9):
 
 if not args.test:
     encoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "encoder/")
-    global_step_en = tf.Variable(
+    global_step = tf.Variable(
             0,
             dtype=tf.int32,
             trainable=False,
-            name='global_step_en'
+            name='global_step'
             )
     lr_rate = lerning_rate_timedecay(
             args.learning_rate,
             30,
-            global_step_en,
+            global_step,
             train_size // args.batch_size
             )
     learning_rate_var = tf.Variable(args.learning_rate)
-    optimizer_en = get_opt(args.opt, learning_rate_var).minimize(loss, var_list=encoder_vars, global_step=global_step_en)
+    optimizer = get_opt(args.opt, learning_rate_var).minimize(loss, global_step=global_step)
+    # optimizer_en = get_opt(args.opt, learning_rate_var).minimize(loss, var_list=encoder_vars, global_step=global_step_en)
     # optimizer_en = clip_grad(optimizer_en, loss, args.clip_val, encoder_vars, global_step_en)
 
-    if not args.dont_train_dict:
-        global_step_de = tf.Variable(0, dtype=tf.int32, trainable=False, name='global_step_de')
-        decoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "decoder/")
-        lr_rate = lerning_rate_timedecay(1.5 * args.learning_rate, 30, global_step_de,
-             train_size // args.batch_size)
-        optimizer_de =  get_opt(args.opt, 1.5 * learning_rate_var).minimize(loss,
-                var_list=decoder_vars, global_step=global_step_de)
+    #if not args.dont_train_dict:
+    #    global_step_de = tf.Variable(0, dtype=tf.int32, trainable=False, name='global_step_de')
+    #    decoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "decoder/")
+    #    lr_rate = lerning_rate_timedecay(1.5 * args.learning_rate, 30, global_step_de,
+    #         train_size // args.batch_size)
+    #    optimizer_de =  get_opt(args.opt, 1.5 * learning_rate_var).minimize(loss,
+    #            var_list=decoder_vars, global_step=global_step_de)
 
        # optimizer_de = clip_grad(optimizer_de, loss, args.clip_val, encoder_vars,
        #         global_step_de)
@@ -451,18 +478,18 @@ with tf.Session() as sess:
                 mask = (X_batch == Y_batch).astype(float)
                 feed_dict[encd_mask] = mask
             # np.savez('debug', X=X_batch, Y=Y_batch, mask=mask)
-            _, iter_loss = sess.run([optimizer_en, loss], feed_dict)
-            if not  args.dont_train_dict:
-                _, iter_loss = sess.run([optimizer_de, loss], feed_dict)
+            _, iter_loss = sess.run([optimizer, loss], feed_dict)
+            #if not  args.dont_train_dict:
+            #    _, iter_loss = sess.run([optimizer_de, loss], feed_dict)
             train_loss.append(iter_loss)
             epoch_loss += iter_loss
 
 
-            if b_num % 10 == 0:
+            if b_num % 30 == 0:
                 summary = sess.run(merged, feed_dict)
-                train_summ_writer.add_summary(summary)
+                train_summ_writer.add_summary(summary, global_step=global_step.eval(session=sess))
 
-            if b_num % 10 == 0:
+            if b_num % 30 == 0:
                 valid_loss = 0
                 v_itr = 0
                 sp_in_itr = 0
@@ -479,7 +506,8 @@ with tf.Session() as sess:
 
                     iter_loss, iter_recon, enc_out, summary  = \
                             sess.run([loss, l_rec, encoder.output, merged], feed_dict)
-                    valid_summ_writer.add_summary(summary)
+                    valid_summ_writer.add_summary(summary,
+                            global_step=global_step.eval(session=sess))
                     sp_out_itr += np.count_nonzero(enc_out)/enc_out.shape[0]
                     sp_in_itr += np.count_nonzero(X_batch)/Xv_batch.shape[0]
                     valid_loss += iter_loss
@@ -493,11 +521,11 @@ with tf.Session() as sess:
                 if valid_loss <= np.min(validation_loss):
                     if args.save_model:
                         f_name = MODEL_DIR + 'csc_u{}_'.format(args.unroll_count)
-                        saver.save(sess, f_name, global_step=global_step_en)
+                        saver.save(sess, f_name, global_step=global_step)
                         print('saving model at: %s'%f_name) 
                 if len(validation_loss)  > 5:
                     if (valid_loss > validation_loss[-2]).all():
-                        learning_rate_var *= 0.5
+                        learning_rate_var *= 0.9
                         print('loading model %s'%MODEL_DIR)
                         saver.restore(sess, tf.train.latest_checkpoint(MODEL_DIR))
                         print('decreasing learning_rate to\

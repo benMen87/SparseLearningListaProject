@@ -41,9 +41,14 @@ class Decoder():
         elif dist_name == 'l1':
             dist_fn = tf.abs
 
+        boundry_mask = np.zeros(self.target.shape[1:4])
+        boundry = self.decoder.get_shape().as_list()[0] // 2
+        boundry_mask[boundry:-boundry, boundry:-boundry, :] = 1.0
+        boundry_mask= tf.constant(boundry_mask.astype('float32'))
+
         recon = self.output[input_index]
-        return tf.reduce_mean(tf.reduce_sum(dist_fn(mask * (self.target -
-            recon)), [1, 2]), name=name)
+        dist = dist_fn(self.target - recon)
+        return tf.reduce_mean(tf.reduce_sum(boundry_mask * dist, [1, 2]), name=name)
 
 def build_model(args, input_shape):
 
@@ -72,10 +77,10 @@ def build_model(args, input_shape):
         if args.inpaint:
             encd_mask = tf.placeholder(tf.float32, shape=encoder.input2D.shape)
         else:
-            encd_mask = np.zeros(input_shape)
-            edges = args.kernel_size // 2
-            encd_mask[edges:-edges, edges:-edges, :] = 1.0
-            encd_mask = tf.constant(encd_mask.astype('float32'))
+            encd_mask = 1 # np.zeros(input_shape)
+            #edges = args.kernel_size // 2
+            #encd_mask[edges:-edges, edges:-edges, :] = 1.0
+            #encd_mask = tf.constant(encd_mask.astype('float32'))
 
     encoder.build_model(encd_mask)
     decoder_trainable = not args.dont_train_dict
