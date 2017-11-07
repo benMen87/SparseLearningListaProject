@@ -10,11 +10,11 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import scipy.io as scio
+
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))+'/'
-sys.path.append(os.path.abspath(DIR_PATH + '../approx_sparse_coding'))
 sys.path.append(os.path.abspath(DIR_PATH + '../'))
 
-import sparse_aed
+from approx_sae.approx_conv2d_sparse_ae import ApproxCSC
 from Utils import stl10_input
 from Utils import load_images 
 from Utils import load_berkeley
@@ -25,7 +25,7 @@ parser = argparse.ArgumentParser(description='Sparse encoder decoder model')
 
 parser.add_argument('-b', '--batch_size', default=2,
                             type=int, help='size of train batches')
-parser.add_argument('-n', '--num_epochs', default=0, type=int,
+parser.add_argument('-n', '--num_epochs', default=1, type=int,
                             help='number of epochs steps')
 parser.add_argument('-ks', '--kernel_size', default=5, type=int,
                             help='kernel size to be used in lista_conv')
@@ -36,7 +36,7 @@ parser.add_argument('-u', '--unroll_count', default=10,
                     type=int, help='Amount of Reccurent timesteps for decoder')
 parser.add_argument('--shrinkge_type', default='soft thresh',
                         choices=['soft thresh', 'smooth soft thresh'])
-parser.add_argument('--learning_rate', '-lr', default=0.001, type=float, help='learning rate')
+parser.add_argument('--learning_rate', '-lr', default=0.0001, type=float, help='learning rate')
 parser.add_argument('--save_model', dest='save_model', action='store_true')
 parser.add_argument('--load_model', dest='load_model', action='store_true')
 parser.add_argument('--debug', dest='debug', action='store_true')
@@ -169,7 +169,7 @@ if not args.test:
 ######################################################
 def savetstfig(sess, encoder, decoder, inputim, targetim, fname):
 
-    Xhat = decoder.recon_image()
+    Xhat = decoder.output
     feed_dict = {encoder.input: inputim}
     if args.inpaint:
         feed_dict[encd_mask] =  (inputim == targetim).astype(float)
@@ -278,27 +278,35 @@ def variable_summaries(var):
 ########################################################
 #       Build Models - Sparse Encoder Decoder
 ########################################################
-encoder, decoder, encd_mask = sparse_aed.build_model(args, input_shape)
-
-
+#encoder, decoder, encd_mask = sparse_aed.build_model(args, input_shape)
+model  = ApproxCSC()
+model.build_model(unroll_count=args.unroll_count,
+                  L=1, batch_size=args.batch_size,
+                  kernel_size=args.kernel_size,
+                  shrinkge_type=args.shrinkge_type,
+                  kernel_count=args.kernel_count,
+                  channel_size=input_shape[-1]
+                )
+encoder = model.encoder
+decoder = model.decoder
 #
 # LOSS
 
 # l2-loss with index -1 is reconstruction of final encoding 
 # l2-loss with index 0 is of indermidate encode
 l_rec  = (1.0 / (input_shape[0]*input_shape[1])) * \
-            decoder.recon_loss_layer_i(-1, encd_mask, args.recon_loss, 'recon_loss')
+            model.reconstruction_loss(args.recon_loss, 'recon_loss')
          #args.middle_loss_factor * \
          #decoder.recon_loss_layer_i(mdl_i, args.recon_loss, 'recon_loss_stage_%d'%mdl_i)
 loss = args.recon_factor * l_rec
 half_ker = args.kernel_size // 2
 if args.total_variation:
-    loss_total_var =  tf.reduce_mean(tf.image.total_variation(decoder.recon_image()))
+    loss_total_var =  tf.reduce_mean(tf.image.total_variation(model.output))
     loss += args.total_variation * loss_total_var
 if args.ms_ssim:
     _ms_ssim = ms_ssim.tf_ms_ssim(
             decoder.target[:,half_ker:-half_ker,half_ker:-half_ker,...],
-            decoder.recon_image()[:,half_ker:-half_ker,half_ker:-half_ker,...], level=4
+            decoder.output[:,half_ker:-half_ker,half_ker:-half_ker,...], level=4
             )
     loss_ms_ssim = (1 - _ms_ssim)
     loss +=  args.ms_ssim * loss_ms_ssim
@@ -317,7 +325,7 @@ with tf.name_scope('encoder'):
     with tf.name_scope('threshold'):
         variable_summaries(encoder._theta)
 with tf.name_scope('decoder'):
-    variable_summaries(decoder.decoder)
+    variable_summaries(decoder.convdict)
 with tf.name_scope('sparse_code'):
     variable_summaries(encoder.output)
 tf.summary.scalar('encoded_sparsity',
@@ -331,7 +339,7 @@ if not args.test:
     tf.summary.scalar('ms_ssim', loss_ms_ssim)
     tf.summary.scalar('total_loss', loss)
 tf.summary.image('input', encoder.input)
-tf.summary.image('output', decoder.recon_image())
+tf.summary.image('output', decoder.output)
 tf.summary.image('target', decoder.target)
 
 #######################################################
@@ -535,7 +543,7 @@ with tf.Session() as sess:
         print('epoch %d: loss val:%f' % (epoch, args.batch_size  * epoch_loss / X_train.shape[0]))
 
     print('='*40)
-    decoder_filters = decoder.decoder.eval()
+    decoder_filters = decoder.convdict.eval()
     decoder_filters_path = DIR_PATH + 'logdir/data/decoder_filters'
     np.save(decoder_filters_path, decoder_filters)
     print('saved decoder filters at path: %s' % decoder_filters_path)

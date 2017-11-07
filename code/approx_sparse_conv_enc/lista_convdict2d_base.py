@@ -1,12 +1,11 @@
 """
-This module contanint Class LISTAConvDict2dBase
-That an TF model for approximation CSC
+This module contanins Class LISTAConvDict2dBase
+Is the base class for approximate convolution sparse coding encoder.
 """
-
+from abc import ABCMeta, abstractmethod
 import sys
 import tensorflow as tf
 import numpy as np
-from approx_sparse_coding.approx_sc import ApproxSC
 
 class LISTAConvDict2dBase(object):
     
@@ -15,26 +14,22 @@ class LISTAConvDict2dBase(object):
        -> Wd = (circ(f_0)|circ(f_1)|...|circ(f_n)) or 1 filter with depth of n
        -> We = (circ(f_0)|circ(f_1)|...|circ(f_n))^T or n fiters with depth of 1
     """
+    __metaclass__ = ABCMeta
 
-    def __init__(self, unroll_count,
-                 inputshape=None,
-                 filter_arr=None,
-                 batch_size=None,
-                 channel_size=3,
-                 shrinkge_type='soft_thresh',
-                 **kwargs ):
+    def __init__(self, unroll_count, **kwargs ):
         """ Create a LISTAConv model.
         Args:
             inputshape: Input X is encoded using conv2D(We, X).
             unroll_size: Amount of times to repeat lcod block.
         """
+        self._unroll_count = unroll_count
+        self.inputshape = kwargs.get('inputshape', None)
+        self._batch_size = kwargs.get('batch_size', None)
+        self.input_channels = kwargs.get('input_channels', 1)
+        self._shrinkge_type = kwargs.get('shrinkge_type', 'soft_thresh')
 
-        self.inputshape = inputshape
-        self.batch_size = batch_size
-        self.input_channels = input_channels
-        self._shrinkge_type = shrinkge_type 
-        self._X = tf.placeholder(tf.float32, shape=(self.batch_size, self.inputshape, self.inputshape, self.input_channels), name='X')
-        self._mask  = tf.placeholder_with_default(1, shape=self._X.shape, name='mask')
+        self._X = tf.placeholder(tf.float32, shape=(None, self.inputshape, self.inputshape, self.input_channels), name='X')
+        self._mask = tf.placeholder_with_default(tf.ones_like(self._X), shape=self._X.shape, name='mask')
         #
         # model variables
         init_type = kwargs.get('init_type', 'random')
@@ -43,7 +38,7 @@ class LISTAConvDict2dBase(object):
         elif init_type == 'param_dict':
             self.init_from_param_dict(kwargs['init_params_dict'])
         elif init_type == 'random':
-            self.init_random_ista_coherent(self, kwargs)
+            self.init_random_ista_coherent(kwargs)
         else:
             raise ValueError('init type: {} is not reconized'.format(init_type))
 
@@ -56,9 +51,9 @@ class LISTAConvDict2dBase(object):
 
         if self._shrinkge_type == 'soft thresh':
             #TODO: Notice thresh is now shared one for each feture map
-            thrsh = kwargs.get('init_threshold', 0.1)
-            self._theta = tf.nn.relu(tf.Variable(tf.fill([thrsh, self.amount_of_kernals],
-                0.1), name='theta'))
+            thrsh = kwargs.get('init_threshold', 0.0)
+            self._theta = tf.nn.relu(tf.Variable(tf.fill([1, self.amount_of_kernals],
+                thrsh), name='theta'))
           #       self.amount_of_kernals], value=0.01)), name='theta')] * unroll_count
         elif self._shrinkge_type == 'smooth soft thresh':
             beta = [tf.Variable(tf.fill([1, self.amount_of_kernals], 5.0), name='beta'+str(u))
@@ -76,18 +71,18 @@ class LISTAConvDict2dBase(object):
         """
         All inilized values are given via init_params_dict
         """
-            self.kernel_size = init_params_dict['Wd'].shape[1]
-            self.amount_of_kernals = init_params_dict['Wd'].shape[2]
+        self.kernel_size = init_params_dict['Wd'].shape[1]
+        self.amount_of_kernals = init_params_dict['Wd'].shape[2]
 
-            if self._shrinkge_type == 'soft thresh':
-                self._theta = tf.nn.relu(tf.Variable(tf.fill([1,
-                    self.amount_of_kernals], value=0.1)), name='theta')
-            else:
-                raise NotImplementedError('shirnkge type not supported')
+        if self._shrinkge_type == 'soft thresh':
+            self._theta = tf.nn.relu(tf.Variable(tf.fill([1,
+                self.amount_of_kernals], value=0.1)), name='theta')
+        else:
+            raise NotImplementedError('shirnkge type not supported')
 
-            self._Wd = tf.Variable(init_params_dict['Wd'],
-                                   name='Wd', dtype=tf.float32)
-            self._We = tf.Variable(init_params_dict['We'],
+        self._Wd = tf.Variable(init_params_dict['Wd'],
+                               name='Wd', dtype=tf.float32)
+        self._We = tf.Variable(init_params_dict['We'],
                                    name='We', dtype=tf.float32)
 
     def init_from_filter_array(self, filter_arr):
@@ -143,18 +138,26 @@ class LISTAConvDict2dBase(object):
     def _double_tanh(self, X):
         raise NotImplementedError('Double Tanh not implemented')
 
-    def build_model(self, mask=None):
+    @abstractmethod
+    def _conv2d_enc(self, _val, _name):
+        """
+        Encoding convolution using We.
+        """
+    @abstractmethod
+    def _conv2d_dec(self, _val, _name):
+        """
+        decoding convolution using Wd.
+        """
+
+    def build_model(self):
         """
         mask - In case of inpainting etc.
         """
         shrinkge_fn = self._shrinkge()
-        _Wd = tf.nn.l2_normalize(self._Wd, [0,1])
-        _We = (0.1) * tf.nn.l2_normalize(self._We, [0,1])
-
 
         X = tf.multiply(self._X, self._mask)
-        B = self.conv2d_enc(
-            _value=X,
+        B = self._conv2d_enc(
+            _val=X,
             _name='bias'
             ) 
         self._Z = shrinkge_fn(B, self._theta, 'Z_0')
@@ -162,16 +165,16 @@ class LISTAConvDict2dBase(object):
         #
         # run unrolling
         for t in range(1, self._unroll_count):
-            conv_wd = self.conv2d_dec(
-                _value=self._Z,
+            conv_wd = self._conv2d_dec(
+                _val=self._Z,
                 _name='convWd'
                 )
             conv_wd = tf.multiply(
                conv_wd,
                self._mask
                )
-            conv_we = self.conv2d_enc(
-               _value=conv_wd,
+            conv_we = self._conv2d_enc(
+               _val=conv_wd,
                _name='convWe'
                )
             res = self._Z - conv_we
@@ -193,6 +196,11 @@ class LISTAConvDict2dBase(object):
     @property
     def We(self):
         return self._We
+
+    @property
+    def mask(self):
+        return self._mask
+
 
     @property
     def output(self):

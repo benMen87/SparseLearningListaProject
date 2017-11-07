@@ -124,7 +124,6 @@ def test():
     saver.restore(sess, tf.train.latest_checkpoint(MODEL_DIR))
 
     images_paths = glob.glob(IMAGES_DIR + '*.png')
-    # Ims = np.load('./test_images/test_ims_local_cn.npz')
     img_gen = next_test_image()
     for I_orig, im_name in img_gen:
         I = I_orig.copy()
