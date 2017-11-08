@@ -83,7 +83,6 @@ def add_noise(X, std):
     noise = np.random.normal(0, std, X.shape)
     return X + noise
 
-
 def preprocess_data(X, addnoise=False, noise_sigma=0, inpaint=False,
         keep_prob=0.5, whiten=False):
     if whiten:
@@ -102,7 +101,6 @@ def preprocess_data(X, addnoise=False, noise_sigma=0, inpaint=False,
 
     if inpaint:
         X *= np.random.choice([0, 1], size=X.shape, p=[1 - keep_prob, keep_prob])
-        np.save('inpaint_debug', X)
     return X
 
 ###########################################################
@@ -289,6 +287,7 @@ model.build_model(unroll_count=args.unroll_count,
                 )
 encoder = model.encoder
 decoder = model.decoder
+encd_mask = model.encoder.mask
 #
 # LOSS
 
