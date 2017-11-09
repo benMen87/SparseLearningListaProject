@@ -56,11 +56,13 @@ class DataLoader(LoadNpzData, Pascal, Stl10, LoadDataFiles):
     class BadDsNameOrPath(Exception):
         pass
 
-    def __init__(self):
-        self.dataset_loaders = {
+    dataset_loaders = {
             'Pascal': Pascal.load,
             'Stl10': Stl10.load,
         }
+
+    def __init__(self):
+        pass
 
     def load_data_for_train(self, ds_name_or_path):
         train = None
