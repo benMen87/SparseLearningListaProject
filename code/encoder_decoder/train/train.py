@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import scipy.io as scio
 
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))+'/'
-sys.path.append(os.path.abspath(DIR_PATH + '../'))
+sys.path.append(os.path.abspath(DIR_PATH + '../../'))
 
 from approx_sae.approx_conv2d_sparse_ae import ApproxCSC
 from Utils import stl10_input
@@ -335,7 +335,8 @@ if not args.test:
     tf.summary.scalar('recon_loss', l_rec)
     if args.total_variation:
         tf.summary.scalar('smooth', loss_total_var)
-    tf.summary.scalar('ms_ssim', loss_ms_ssim)
+    if args.ms_ssim:
+        tf.summary.scalar('ms_ssim', loss_ms_ssim)
     tf.summary.scalar('total_loss', loss)
 tf.summary.image('input', encoder.input)
 tf.summary.image('output', decoder.output)
