@@ -7,7 +7,7 @@ from tensorflow.python import debug as tf_debug
 from keras.datasets import mnist, cifar10
 from keras.utils import np_utils
 import matplotlib
-matplotlib.use('Agg')
+#matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import scipy.io as scio
 
@@ -15,11 +15,14 @@ DIR_PATH = os.path.dirname(os.path.realpath(__file__))+'/'
 sys.path.append(os.path.abspath(DIR_PATH + '../../'))
 
 from approx_sae.approx_conv2d_sparse_ae import ApproxCSC
+from Utils import data_handler
 from Utils import stl10_input
 from Utils import load_images 
 from Utils import load_berkeley
 from Utils import ms_ssim
 from Utils.psnr import psnr as psnr
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 
 parser = argparse.ArgumentParser(description='Sparse encoder decoder model')
 
@@ -67,101 +70,22 @@ parser.add_argument('--clip_val', default=5, type=float, help='max value to clip
 
 
 args = parser.parse_args()
+args.inpaint = True
+
+dh_args = {
+    'valid_ratio':0.2,
+    'norm_val':255,
+    'ds_name':'berkeley',
+}
+if args.add_noise:
+    dstype = 'add_noise'
+    dh_arg['noise_sigma'] = 20.0
+elif args.inpaint:
+    dstype = 'inpaint'
+    dh_args['drop_prob'] = 1-args.inpaint_keep_prob
 
 
-###########################################################
-#                  Pre-Proccess Data Sets 
-###########################################################
-def rgb2gray(X):
-    r, g, b = X[..., 0], X[...,1], X[...,2]
-    X = (0.2125 * r) + (0.7154 * g) + (0.0721 * b)
-    if len(X.shape) == 2:
-        X = X[..., np.newaxis]
-    return X
-
-def add_noise(X, std):
-    noise = np.random.normal(0, std, X.shape)
-    return X + noise
-
-def preprocess_data(X, addnoise=False, noise_sigma=0, inpaint=False,
-        keep_prob=0.5, whiten=False):
-    if whiten:
-        X -= np.mean(X, axis=(1, 2), keepdims=True)
-        X /= np.std(X, axis=(1, 2), keepdims=True)
-    else:
-        norm = 255 if 200 < np.max(X) <= 255  else np.max(X) 
-        print('norm is {}'.format(norm))
-        X = X.astype('float32') / norm
-        noise_sigma = float(noise_sigma) / norm
-    if addnoise:
-        X = add_noise(X, noise_sigma)
- 
-    if (len(X.shape) == 3 and not args.grayscale) or (len(X.shape) == 2 and args.grayscale):
-        X = X[..., np.newaxis]
-
-    if inpaint:
-        X *= np.random.choice([0, 1], size=X.shape, p=[1 - keep_prob, keep_prob])
-    return X
-
-###########################################################
-#                   Load Data Sets
-###########################################################
-
-#
-# load data
-if args.dataset == 'stl10':  # Data set with unlabeld too large cant loadfully to memory
-    if not args.test:
-        X_train, X_test= stl10_input.load_data(grayscale=args.grayscale)
-        np.random.shuffle(X_train)
-    else:
-        X_test, _ = stl10_input.load_test(grayscale=args.grayscale)
-    # np.random.shuffle(X_test)
-elif args.dataset == 'berkeley':
-    X_train, X_test = load_berkeley.load(args.grayscale)
-    np.random.shuffle(X_train)
-elif args.dataset == 'pascal':
-    path = load_berkeley.IMGSPATH + 'psacal_gray.npz'
-    X_train, X_test = load_berkeley.load(args.grayscale, path)
-    np.random.shuffle(X_train)
-elif args.dataset == 'city_fruit':
-    D = np.load('/data/hillel/data_sets/city_fruit.npz')
-    X_train, X_test = D['TRAIN'], D['TEST']
-    X_train = np.concatenate((X_train, X_train[:,::-1,...], X_train[...,::-1,:], X_train[:,::-1, ::-1,:]))
-    np.random.shuffle(X_train)
-else: # dataset is a path of imags to load
-    X_test = load_images.load(args.dataset, args.grayscale)
-    print(X_test.shape)
-
-noise_sigma = 20
-
-
-Y_test =  np.empty(shape=X_test.shape)
-Y_test[:] = X_test[:]
-X_test = preprocess_data(X_test, args.add_noise, noise_sigma, args.inpaint,
-        args.inpaint_keep_prob, args.whiten)
-Y_test = preprocess_data(Y_test, whiten=args.whiten)
-input_shape = X_test.shape[1:]
-
-if not args.test:
-    Y_train = np.empty(shape=X_train.shape)
-    Y_train[:] = X_train[:]
-    X_train = preprocess_data(X_train, args.add_noise, noise_sigma, args.inpaint,
-            args.inpaint_keep_prob, args.whiten)
-    Y_train = preprocess_data(Y_train, whiten=args.whiten)
-    # split train set
-    dataset_size = X_train.shape[0]
-    train_size = int(np.ceil(dataset_size * 0.9))
-    valid_size = dataset_size - train_size
-    if not args.dataset == 'berkeley':
-        X_valid = X_train[:valid_size]
-        X_train = X_train[valid_size:]
-        Y_valid = Y_train[:valid_size]
-        Y_train = Y_train[valid_size:]
-    else:
-        X_valid = X_test
-        Y_valid = Y_test
-    print("training size: {}, test size: {}".format(X_train.shape[0], X_test.shape[0]))
-    train_size = X_train.shape[0]
+dh = data_handler.DataHandlerBase.factory(dstype, **dh_args)
 ######################################################
 #   Plot and save test image
 ######################################################
@@ -277,13 +201,19 @@ def variable_summaries(var):
 #       Build Models - Sparse Encoder Decoder
 ########################################################
 #encoder, decoder, encd_mask = sparse_aed.build_model(args, input_shape)
+train_dh = dh.train_gen(args.batch_size)
+valid_dh = dh.valid_gen(args.batch_size)
+test_dh = dh.test_gen(10)
+
+trainset_shape = train_dh.shape
+
 model  = ApproxCSC()
 model.build_model(unroll_count=args.unroll_count,
                   L=1, batch_size=args.batch_size,
                   kernel_size=args.kernel_size,
                   shrinkge_type=args.shrinkge_type,
                   kernel_count=args.kernel_count,
-                  channel_size=input_shape[-1]
+                  channel_size=trainset_shape[-1]
                 )
 encoder = model.encoder
 decoder = model.decoder
@@ -293,7 +223,7 @@ encd_mask = model.encoder.mask
 
 # l2-loss with index -1 is reconstruction of final encoding 
 # l2-loss with index 0 is of indermidate encode
-l_rec  = (1.0 / (input_shape[0]*input_shape[1])) * \
+l_rec  = (1.0 / (train_dh.shape[0]*train_dh.shape[1])) * \
             model.reconstruction_loss(args.recon_loss, 'recon_loss')
          #args.middle_loss_factor * \
          #decoder.recon_loss_layer_i(mdl_i, args.recon_loss, 'recon_loss_stage_%d'%mdl_i)
@@ -388,47 +318,10 @@ if not args.test:
             args.learning_rate,
             30,
             global_step,
-            train_size // args.batch_size
+            train_dh.batchs_per_epoch
             )
     learning_rate_var = tf.Variable(args.learning_rate)
     optimizer = get_opt(args.opt, learning_rate_var).minimize(loss, global_step=global_step)
-    # optimizer_en = get_opt(args.opt, learning_rate_var).minimize(loss, var_list=encoder_vars, global_step=global_step_en)
-    # optimizer_en = clip_grad(optimizer_en, loss, args.clip_val, encoder_vars, global_step_en)
-
-    #if not args.dont_train_dict:
-    #    global_step_de = tf.Variable(0, dtype=tf.int32, trainable=False, name='global_step_de')
-    #    decoder_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "decoder/")
-    #    lr_rate = lerning_rate_timedecay(1.5 * args.learning_rate, 30, global_step_de,
-    #         train_size // args.batch_size)
-    #    optimizer_de =  get_opt(args.opt, 1.5 * learning_rate_var).minimize(loss,
-    #            var_list=decoder_vars, global_step=global_step_de)
-
-       # optimizer_de = clip_grad(optimizer_de, loss, args.clip_val, encoder_vars,
-       #         global_step_de)
-
-
-def nextbatch(X, Y, batch_size=500, run_once=False):
-    offset = 0
-    data_len = X.shape[0]
-    batch_Y = None # label
-    batch_X = None # input image maybe with noise
-
-    while True:
-        if offset + batch_size <= data_len:
-            batch_X = X[offset: batch_size + offset]
-            batch_Y = Y[offset: batch_size + offset]
-            offset = offset + batch_size
-        else:
-            if run_once:
-                raise StopIteration()
-            batch_X = np.concatenate((X[offset: data_len], X[:batch_size - (data_len - offset)]), axis=0)
-            batch_Y = np.concatenate((Y[offset: data_len], Y[:batch_size - (data_len - offset)]), axis=0)
-            offset = batch_size - (data_len - offset)
-            # reshuffle batch
-            idx = np.random.permutation(X.shape[0])
-            X = X[idx,...]
-            Y = Y[idx,...]
-        yield batch_X, batch_Y
 ###################################################################
 #                Training   +   Results
 ###################################################################
@@ -476,19 +369,15 @@ with tf.Session() as sess:
     for epoch in range(1, args.num_epochs + 1):
         epoch_loss = 0
         print('epoch number:%d', epoch)
-        train_batch = nextbatch(X=X_train, Y=Y_train, batch_size=args.batch_size,
-                                run_once=True)
         b_num = 0
-        for X_batch, Y_batch in train_batch:
+
+        for X_batch, Y_batch in train_dh:
             b_num += 1
             feed_dict = {encoder.input: X_batch, decoder.target: Y_batch}
             if args.inpaint:
                 mask = (X_batch == Y_batch).astype(float)
                 feed_dict[encd_mask] = mask
-            # np.savez('debug', X=X_batch, Y=Y_batch, mask=mask)
             _, iter_loss = sess.run([optimizer, loss], feed_dict)
-            #if not  args.dont_train_dict:
-            #    _, iter_loss = sess.run([optimizer_de, loss], feed_dict)
             train_loss.append(iter_loss)
             epoch_loss += iter_loss
 
@@ -504,8 +393,7 @@ with tf.Session() as sess:
                 sp_out_itr = 0
                 l1 = 0
                 recon = 0
-                vaild_batch = nextbatch(X=X_valid, Y=Y_valid, batch_size=5, run_once=True)
-                for Xv_batch, Yv_batch in vaild_batch:
+                for Xv_batch, Yv_batch in valid_dh:
                     v_itr += 1
                     feed_dict = {encoder.input: Xv_batch, decoder.target: Yv_batch}
                     if args.inpaint:
