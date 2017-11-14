@@ -90,7 +90,7 @@ def test(encoder, decoder, batch, loss=None):
             mask = (X_batch == Y_batch).astype(float)
             feed_dict[encd_mask] = mask
         test_loss += sess.run(loss, feed_dict)
-        recon_loss += sess.run(l_rec, feed_dict)
+        recon_loss += sess.run(_reconstruction_loss, feed_dict)
         test_iter += 1
 
     if test_iter:
@@ -182,20 +182,20 @@ def reconstruction_loss(_model):
 
     if HYPR_PARAMS['disttyp'] == 'l1':
         dist_loss = approx_sae_losses.l1(_out=_out, _target=_target, _boundry=boundry)
-        tf.summary.scalar('dist_l1', dist_loss, collections='TB_LOSS')
+        tf.summary.scalar('dist_l1', dist_loss, collections=['TB_LOSS'])
     elif HYPR_PARAMS['disttyp'] == 'smooth_l1':
        dist_loss = approx_sae_losses.smooth_l1(_out=_out, _target=_target, _boundry=boundry)
-       tf.summary.scalar('dist_smoothl1', dist_loss, collections='TB_LOSS')
+       tf.summary.scalar('dist_smoothl1', dist_loss, collections=['TB_LOSS'])
     elif HYPR_PARAMS['disttyp'] == 'l2':
        dist_loss = approx_sae_losses.l2(_out=out, _target=target, _boundry=boundry)
-       tf.summary.scalar('dist_l2', dist_loss, collections='TB_LOSS')
+       tf.summary.scalar('dist_l2', dist_loss, collections=['TB_LOSS'])
 
     if HYPR_PARAMS['ms_ssim']:
         ms_ssim = ms_ssim.tf_ms_ssim(
                 target[:,half_ker:-half_ker,half_ker:-half_ker,...],
                 out[:,half_ker:-half_ker,half_ker:-half_ker,...]
         )
-        tf.summary.scalar('ms_ssim', ms_ssim, collections='TB_LOSS')
+        tf.summary.scalar('ms_ssim', ms_ssim, collections=['TB_LOSS'])
     return dist, (1 - ms_ssim)
 
 def sparsecode_loss(_model):
@@ -204,14 +204,14 @@ def sparsecode_loss(_model):
 
     if HYPR_PARAMS['sparse_factor']:
         sparse_loss = approx_sae_losses.l1(_model.output, tf.zeros_like(_model.output))
-        tf.summary.scalar('l1_sparse', sparse_loss, collections='TB_LOSS')
+        tf.summary.scalar('l1_sparse', sparse_loss, collections=['TB_LOSS'])
     if HYPR_PARAMS['sparse_sim_factor']:
         similarity_loss = approx_sae_losses.sc_similarity(
             _x=_model.sparsecode,
             _chunk_size=HYPR_PARAMS['dup_count'],
             _chunk_count=HYPR_PARAMS['batch_size']
         )
-        tf.summary.scalar('sc_sim', similarity_loss, collections='TB_LOSS')
+        tf.summary.scalar('sc_sim', similarity_loss, collections=['TB_LOSS'])
     return sparse_loss, similarity_loss
     
 class Saver():
@@ -272,6 +272,7 @@ def train(_model, _datahandler):
     optimizer = get_opt(learning_rate_var).minimize(loss, global_step=global_step)
 
     train_dh = _datahandler.train_gen(HYPR_PARAMS['batch_size'])
+    valid_dh = _datahandler.valid_gen(HYPR_PARAMS['batch_size'])
 
     ###################################################################
     #                Training   +   Results
@@ -316,7 +317,7 @@ def train(_model, _datahandler):
             for X_batch, Y_batch in train_dh:
                 b_num += 1
                 feed_dict = {_model.input: X_batch, _model.target: Y_batch}
-                if inpaint:
+                if HYPR_PARAMS['task'] == 'inpaint':
                     mask = (X_batch == Y_batch).astype(float)
                     feed_dict[encd_mask] = mask
                 _, iter_loss = sess.run([optimizer, loss], feed_dict)
@@ -325,8 +326,9 @@ def train(_model, _datahandler):
 
 
                 if b_num % 30 == 0:
-                    summary = sess.run(merged, feed_dict)
-                    train_summ_writer.add_summary(summary, global_step=global_step.eval(session=sess))
+                    summary = sess.run([merged, merged_only_tr], feed_dict)
+                    for s in summary:
+                        train_summ_writer.add_summary(s, global_step=global_step.eval(session=sess))
 
                 if b_num % 30 == 0:
                     valid_loss = 0
@@ -337,13 +339,13 @@ def train(_model, _datahandler):
                     recon = 0
                     for Xv_batch, Yv_batch in valid_dh:
                         v_itr += 1
-                        feed_dict = {encoder.input: Xv_batch, decoder.target: Yv_batch}
-                        if args.inpaint:
+                        feed_dict = {_model.input: Xv_batch, _model.target: Yv_batch}
+                        if HYPR_PARAMS['task'] == 'inpaint':
                             mask = (Xv_batch == Yv_batch).astype(float)
                             feed_dict[encd_mask] = mask
 
                         iter_loss, iter_recon, enc_out, summary  = \
-                                sess.run([loss, l_rec, encoder.output, merged], feed_dict)
+                                sess.run([loss, _reconstructoin_loss, _model.output, merged], feed_dict)
                         valid_summ_writer.add_summary(summary,
                                 global_step=global_step.eval(session=sess))
                         sp_out_itr += np.count_nonzero(enc_out)/enc_out.shape[0]
