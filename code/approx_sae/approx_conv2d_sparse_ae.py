@@ -17,7 +17,7 @@ class AutoEncoderBase(object):
     __metaclass__ = ABCMeta
 
     class NotInitlizedError(Exception):
-        pass    
+        pass
 
     def __init__(self):
         self._encoder = None
@@ -44,18 +44,6 @@ class AutoEncoderBase(object):
         else:
             return _val
    
-    def reconstruction_loss(self, _dist_name='l2', _boundry=(0 ,0), _name='recon_loss'):
-        if _dist_name == 'l2':
-            dist_fn = tf.square
-        elif _dist_name == 'l1':
-            dist_fn = tf.abs
-        bound_row = _boundry[0]
-        bound_col = _boundry[1]
-        dist = dist_fn(
-            self.target[:,bound_row:-bound_row,bound_row:-bound_row,:] -
-            self.output[:,bound_row:-bound_row,bound_row:-bound_row,:]
-            )
-        return tf.reduce_mean(tf.reduce_sum(dist, [1, 2]), name=_name)
     
     
 class ApproxCSC(AutoEncoderBase):
@@ -69,18 +57,22 @@ class ApproxCSC(AutoEncoderBase):
             list {}'.format(self.LEGALE_TPYES))
         self._type = type
 
-    #  GETTERS  
+    #  GETTERS  - I/O
     @property
     def target(self):
-        return self.raise_on_none(self._decoder.target, 'target')
+        return self.raise_on_none(self.decoder.target, 'target')
 
     @property
     def output(self):
-        return self.raise_on_none(self._encoder.output, 'output')
+        return self.raise_on_none(self.decoder.output, 'output')
+
+    @property
+    def sparsecode(self):
+        return self.raise_on_none(self.encoder.output, 'output')
 
     @property
     def input(self):
-        return self.raise_on_none(self._decoder.input, 'intput')
+        return self.raise_on_none(self.encoder.input, 'intput')
 
     @property
     def encoder(self):
@@ -129,12 +121,3 @@ class ApproxCSC(AutoEncoderBase):
         }
         self._decoder = self._get_decoder(**_decargs)
         self._decoder.build_model(_sc=self._encoder.output)
-
-    def reconstruction_loss(self, _dist_name='l2', _name='acsc_recon_loss'):
-        boundry = self.encoder.kernel_size // 2
-        return super(ApproxCSC, self).reconstruction_loss(
-                    _dist_name=_dist_name,
-                    _boundry=(boundry, boundry),
-                    _name=_name
-                    ) 
- 

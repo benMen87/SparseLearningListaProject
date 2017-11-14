@@ -7,14 +7,15 @@ import stl10_input
 
 
 DEFAULT_DATA_PATH = '/data/hillel/data_sets/'
-class LoadNpzData():
+
+class LoadNpzData(object):
 
     def __init__(self):
         pass
 
-    def load(self,path, tr_key='TRAIN', vl_key='VAL', ts_key='TEST'):
-        data = np.load(self.path)
-        return np.concatenate((DB[tr_key], DB[vl_key]), axis=0), DB[ts_key]
+    def load(self, path, tr_key='TRAIN', vl_key='VAL', ts_key='TEST'):
+        data = np.load(path)
+        return np.concatenate((data[tr_key], data[vl_key]), axis=0), data[ts_key]
 
 class Pascal(LoadNpzData):
     """Load pascal dataset saved as npz"""    
@@ -22,20 +23,30 @@ class Pascal(LoadNpzData):
         pass
     
     def load(self, gray=True):
-        path = DEFAULT_DATA_PATH + gray*'pascal_gray.npz' + (1-gray)*'pascal.npz'
+        path = DEFAULT_DATA_PATH + gray*'psacal_gray.npz' + (1-gray)*'pascal.npz'
         train, test = super(Pascal, self).load(path)
         return train, test
 
-class Stl10():
-    """Load STL10 saved as binary file"""
+class Berkeley(LoadNpzData):
+    """Load pascal dataset saved as npz"""    
     def __init__(self):
         pass
     
+    def load(self, gray=True):
+        path = DEFAULT_DATA_PATH + 'berkeley_db_321X321.npz'
+        train, test = super(Berkeley, self).load(path)
+        return train, test
+
+class Stl10(object):
+    """Load STL10 saved as binary file"""
+    def __init__(self):
+        pass
+
     def load(gray=True):
        train, test = stl10_input.load_data(grayscale=gray)
        return train, test
 
-class LoadDataFiles():
+class LoadDataFiles(object):
     """Load image files from test dir and train dir"""
     def __init__(self):
         pass
@@ -46,19 +57,19 @@ class LoadDataFiles():
 
         if open_files:
             raise NotImplementedError('loading files is not implemented')
-
         return data
 
     
 
-class DataLoader(LoadNpzData, Pascal, Stl10, LoadDataFiles):
+class DataLoader(Pascal, Stl10, LoadDataFiles):
     
     class BadDsNameOrPath(Exception):
         pass
 
     dataset_loaders = {
-            'Pascal': Pascal.load,
-            'Stl10': Stl10.load,
+            'pascal': Pascal().load,
+            'stl10': Stl10().load,
+            'berkeley': Berkeley().load
         }
 
     def __init__(self):
@@ -70,7 +81,7 @@ class DataLoader(LoadNpzData, Pascal, Stl10, LoadDataFiles):
 
         if ds_name_or_path in self.dataset_loaders.keys():
             ds_name = ds_name_or_path
-            train, test = self.dataset_loaders[ds_name]    
+            train, test = self.dataset_loaders[ds_name]()
         elif os.path.isdir(ds_name_or_path):
             path = ds_name_or_path
             train = LoadDataFiles.load(path)
@@ -80,4 +91,4 @@ class DataLoader(LoadNpzData, Pascal, Stl10, LoadDataFiles):
                 test = LoadDataFiles.load(ds_name_or_path[1])
         if train is None and test is None:
             raise BadDsNameOrPath('Bas name or path {}'.format(ds_name_or_path))
-        return train, test
+        return train.astype('float32'), test.astype('float32')

@@ -26,21 +26,25 @@ def build_dataset(pathtosave, rgb2gray, ims_path=BSDSPATH):
     X_train = []
     X_test = []
     X_val = []
-    dx = dy = 321
+    dx = dy = 120
 
     db_p = tar.open(ims_path)
     for f_info in db_p.getmembers():
-        print('size %d'%len(db_p.getmember()))
+#        print('size %d'%len(db_p.getmember()))
         if f_info.name.endswith('.jpg'):
             img_fp = db_p.extractfile(f_info)
             I = Image.open(img_fp)
             w, h = I.size
             if rgb2gray:
                 x = y = 0
-                if not w == dx:
+                if w > dx:
                     x = random.randint(0, w-dx-1)
-                if not h == dy:
+                else:
+                    x = w
+                if h > dy:
                     y = random.randint(0, h-dy-1)
+                else:
+                    y = h
                 I = I.convert('L')
                 I = np.asarray(I.crop((x, y, x+dx, y+dy)))
                 I = I[...,np.newaxis]
@@ -55,7 +59,8 @@ def build_dataset(pathtosave, rgb2gray, ims_path=BSDSPATH):
             else: # test
                 X_test.append(I)
 
-    if not os.path.isdir(pathtosave):
-        os.makedirs(pathtosave)
+    #if not os.path.isdir(pathtosave):
+    #    os.makedirs(pathtosave)
+    print 'saving modle'
     np.savez(pathtosave, TRAIN=X_train, TEST=X_test, VAL=X_val)
 
