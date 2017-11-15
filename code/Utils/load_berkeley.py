@@ -30,7 +30,6 @@ def build_dataset(pathtosave, rgb2gray, ims_path=BSDSPATH):
 
     db_p = tar.open(ims_path)
     for f_info in db_p.getmembers():
-#        print('size %d'%len(db_p.getmember()))
         if f_info.name.endswith('.jpg'):
             img_fp = db_p.extractfile(f_info)
             I = Image.open(img_fp)

@@ -20,6 +20,8 @@ from Utils import data_handler
 from Utils import ms_ssim
 from Utils.psnr import psnr as psnr
 
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 ######################################################
 #   Plot and save test image
 ######################################################
@@ -173,7 +175,7 @@ def config_train_tb(_encoder, _decoder):
     return tensorboard_path
 
 def reconstruction_loss(_model):
-    dist = 0
+    dist_loss = 0
     ms_ssim = 0
 
     out = _model.decoder.output
@@ -196,14 +198,14 @@ def reconstruction_loss(_model):
                 out[:,half_ker:-half_ker,half_ker:-half_ker,...]
         )
         tf.summary.scalar('ms_ssim', ms_ssim, collections=['TB_LOSS'])
-    return dist, (1 - ms_ssim)
+    return dist_loss, (1 - ms_ssim)
 
 def sparsecode_loss(_model):
     sparse_loss = 0
     similarity_loss = 0
 
     if HYPR_PARAMS['sparse_factor']:
-        sparse_loss = approx_sae_losses.l1(_model.output, tf.zeros_like(_model.output))
+        sparse_loss = tf.reduce_mean(tf.abs(_model.sparsecode))
         tf.summary.scalar('l1_sparse', sparse_loss, collections=['TB_LOSS'])
     if HYPR_PARAMS['sparse_sim_factor']:
         similarity_loss = approx_sae_losses.sc_similarity(
@@ -271,8 +273,8 @@ def train(_model, _datahandler):
     learning_rate_var = tf.Variable(args.learning_rate)
     optimizer = get_opt(learning_rate_var).minimize(loss, global_step=global_step)
 
-    train_dh = _datahandler.train_gen(HYPR_PARAMS['batch_size'])
-    valid_dh = _datahandler.valid_gen(HYPR_PARAMS['batch_size'])
+    train_dh = _datahandler.train_gen(HYPR_PARAMS['dup_count']*HYPR_PARAMS['batch_size'])
+    valid_dh = _datahandler.valid_gen(HYPR_PARAMS['dup_count']*HYPR_PARAMS['batch_size'])
 
     ###################################################################
     #                Training   +   Results
@@ -343,7 +345,6 @@ def train(_model, _datahandler):
                         if HYPR_PARAMS['task'] == 'inpaint':
                             mask = (Xv_batch == Yv_batch).astype(float)
                             feed_dict[encd_mask] = mask
-
                         iter_loss, iter_recon, enc_out, summary  = \
                                 sess.run([loss, _reconstructoin_loss, _model.output, merged], feed_dict)
                         valid_summ_writer.add_summary(summary,
@@ -460,7 +461,7 @@ if __name__ == '__main__':
                                 help='amount of kernel to use in lista_conv')
     parser.add_argument('--dilate', '-dl', action='store_true')
     parser.add_argument('-u', '--unroll_count', default=10,
-     type=int, help='Amount of Reccurent timesteps for decoder')
+         type=int, help='Amount of Reccurent timesteps for decoder')
     parser.add_argument('--shrinkge_type', default='soft thresh',
                             choices=['soft thresh', 'smooth soft thresh'])
     parser.add_argument('--learning_rate', '-lr', default=0.0001, type=float, help='learning rate')
@@ -471,15 +472,15 @@ if __name__ == '__main__':
             creating load/store log dir names')
     parser.add_argument('--load_name', default='', type=str, help='used to\
             load from a model with "name" diffrent from this model name')
-    parser.add_argument('--dataset', default='berkeley', choices=['mnist','stl10', 'cifar10', 'pascal'])
+    parser.add_argument('--dataset', default='pascal_small', choices=['mnist','stl10', 'cifar10', 'pascal', 'pascal_small'])
     parser.add_argument('--sparse_factor', '-sf',  default=0.5, type=float)
-    parser.add_argument('--sparse_sim_factor',  default=0.0, type=float)
+    parser.add_argument('--sparse_sim_factor',  default=0.1, type=float)
     parser.add_argument('--recon_factor', '-rf',  default=1.0, type=float)
     parser.add_argument('--ms_ssim', '-ms',  default=0.0, type=float)
-    parser.add_argument('--dup_count', '-dc',  default=0, type=int)
+    parser.add_argument('--dup_count', '-dc',  default=2, type=int)
     parser.add_argument('--load_pretrained_dict', action='store_true', help='inilize dict with pre traindict in "./pretrained_dict" dir')
     parser.add_argument('--dont_train_dict', action='store_true',  help='how many epochs to wait train dict -1 means dont train')
-    parser.add_argument('--task',  default='denoise', choices=['deniose', 'inpaint'], 
+    parser.add_argument('--task',  default='multi_denoise', choices=['deniose', 'inpaint', 'mutli_deniose'], 
             help='add noise to input')
     parser.add_argument('--grayscale',  action='store_true', help='converte RGB images to grayscale')
     parser.add_argument('--inpaint_keep_prob', '-p', type=float, default=0.5,

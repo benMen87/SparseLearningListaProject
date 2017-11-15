@@ -15,7 +15,11 @@ class LoadNpzData(object):
 
     def load(self, path, tr_key='TRAIN', vl_key='VAL', ts_key='TEST'):
         data = np.load(path)
-        return np.concatenate((data[tr_key], data[vl_key]), axis=0), data[ts_key]
+        if  len(data[vl_key]):
+           train = np.concatenate((data[tr_key], data[vl_key]), axis=0)
+        else:
+            train = data[tr_key]
+        return train, data[ts_key]
 
 class Pascal(LoadNpzData):
     """Load pascal dataset saved as npz"""    
@@ -25,6 +29,16 @@ class Pascal(LoadNpzData):
     def load(self, gray=True):
         path = DEFAULT_DATA_PATH + gray*'psacal_gray.npz' + (1-gray)*'pascal.npz'
         train, test = super(Pascal, self).load(path)
+        return train, test
+
+class PascalSmall(LoadNpzData):
+    """Load pascal dataset saved as npz"""    
+    def __init__(self):
+        pass
+    
+    def load(self):
+        path = DEFAULT_DATA_PATH + '/pascal_small.npz'
+        train, test = super(PascalSmall, self).load(path)
         return train, test
 
 class Berkeley(LoadNpzData):
@@ -69,7 +83,8 @@ class DataLoader(Pascal, Stl10, LoadDataFiles):
     dataset_loaders = {
             'pascal': Pascal().load,
             'stl10': Stl10().load,
-            'berkeley': Berkeley().load
+            'berkeley': Berkeley().load,
+            'pascal_small': PascalSmall().load
         }
 
     def __init__(self):

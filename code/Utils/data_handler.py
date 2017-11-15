@@ -33,9 +33,13 @@ class DataHandlerBase(DataLoader):
             'norm_val':kwargs['norm_val']
         }
 
-        if kwargs['task']=='denoise':
+        if kwargs['task'] == 'denoise':
             DS_ARGS['noise_sigma'] = kwargs['noise_sigma']
             return DataHandlerNoise(**DS_ARGS)
+        elif kwargs['task'] == 'multi_denoise':
+            DS_ARGS['noise_sigma'] = kwargs['noise_sigma']
+            DS_ARGS['dup_count'] = kwargs['dup_count']
+            return DataHandlerMultipleNoise(**DS_ARGS)
         elif kwargs['task'] == 'inpaint':
             DS_ARGS['inpaint_keep_prob'] = kwargs['inpaint_keep_prob']
             return DataHandlerInpaint(**DS_ARGS)
@@ -157,8 +161,8 @@ class DataHandlerMultipleNoise(DataHandlerBase):
     """
     Data handler for train session with noise.
     """
-    def __init__(self, valid_ratio, noise_sigma,ds_name, dup_count=10, norm_val=255):
-        super(DataHandlerNoise, self).__init__(valid_ratio)
+    def __init__(self, valid_ratio, noise_sigma,ds_name, dup_count, norm_val=255):
+        super(DataHandlerMultipleNoise, self).__init__(valid_ratio)
         self.sigma = float(noise_sigma) / norm_val
         self.load_data(name=ds_name, norm_val=norm_val)
         self.dup_count = dup_count
@@ -167,11 +171,11 @@ class DataHandlerMultipleNoise(DataHandlerBase):
         data = kwargs['data']
         data = np.repeat(data, self.dup_count, axis=0)
         data_n = data + np.random.normal(0, self.sigma, data.shape)
-        return data_n
+        return data_n, data
 
     def xy_gen(self, target, batch_size, run_once):
         """Add noise to targer im yeild batches"""
-        data_in =  self.preprocess_data(data=target)
+        data_in, target =  self.preprocess_data(data=target)
         batch = self.Batch(batch_size, data_in, target, run_once)
         return batch
 
@@ -201,7 +205,7 @@ class DataHandlerInpaint(DataHandlerBase):
         return data_n, mask
 
     def xy_gen(self, target, batch_size, run_once):
-        """Add noise to targer im yeild batches"""
+        """Add noise to target im yeild batches"""
         data_in, mask = self.preprocess_data(data=target)
         batch = self.Batch(batch_size, data_in, target, run_once)
         return batch
