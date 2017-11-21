@@ -22,8 +22,6 @@ def tf_sparse_count(tf_vec):
     count = tf.reduce_sum(as_ints)
     return count
 
-
-
 def train(sess, model, train_gen, num_optimization_steps, valid_gen=None,
           valid_steps=0, logdir=DIR_PATH + '/logdir'):
     """ Train.

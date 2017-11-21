@@ -11,8 +11,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 import scipy.io as scio
 
-DIR_PATH = os.path.dirname(os.path.realpath(__file__))+'/'
-sys.path.append(os.path.abspath(DIR_PATH + '../../'))
+DIR_PATH = os.path.dirname(os.path.realpath(__file__))+'/../'
+sys.path.append(os.path.abspath(DIR_PATH + '/../'))
 
 from approx_sae.approx_conv2d_sparse_ae import ApproxCSC
 from approx_sae import approx_sae_losses
@@ -21,7 +21,6 @@ from Utils import ms_ssim
 from Utils.psnr import psnr as psnr
 
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '2'
 ######################################################
 #   Plot and save test image
 ######################################################
@@ -176,14 +175,14 @@ def config_train_tb(_encoder, _decoder):
 
 def reconstruction_loss(_model):
     dist_loss = 0
-    ms_ssim = 0
+    _ms_ssim = 0
 
     out = _model.decoder.output
     target = _model.decoder.target
     boundry = (_model.encoder.kernel_size // 2,_model.encoder.kernel_size // 2)
 
     if HYPR_PARAMS['disttyp'] == 'l1':
-        dist_loss = approx_sae_losses.l1(_out=_out, _target=_target, _boundry=boundry)
+        dist_loss = approx_sae_losses.l1(_out=out, _target=target, _boundry=boundry)
         tf.summary.scalar('dist_l1', dist_loss, collections=['TB_LOSS'])
     elif HYPR_PARAMS['disttyp'] == 'smooth_l1':
        dist_loss = approx_sae_losses.smooth_l1(_out=_out, _target=_target, _boundry=boundry)
@@ -193,12 +192,14 @@ def reconstruction_loss(_model):
        tf.summary.scalar('dist_l2', dist_loss, collections=['TB_LOSS'])
 
     if HYPR_PARAMS['ms_ssim']:
-        ms_ssim = ms_ssim.tf_ms_ssim(
+        half_ker = _model.encoder.kernel_size // 2
+        _ms_ssim = ms_ssim.tf_ms_ssim(
                 target[:,half_ker:-half_ker,half_ker:-half_ker,...],
-                out[:,half_ker:-half_ker,half_ker:-half_ker,...]
+                out[:,half_ker:-half_ker,half_ker:-half_ker,...],
+                level=4
         )
-        tf.summary.scalar('ms_ssim', ms_ssim, collections=['TB_LOSS'])
-    return dist_loss, (1 - ms_ssim)
+        tf.summary.scalar('ms_ssim', _ms_ssim, collections=['TB_LOSS'])
+    return dist_loss, (1 - _ms_ssim)
 
 def sparsecode_loss(_model):
     sparse_loss = 0
@@ -219,37 +220,41 @@ def sparsecode_loss(_model):
 class Saver():
     """Help handle save/restore logic"""
     def __init__(self, **kwargs):
-        self.save = kwargs.get('save_model', False)
-        self.load = kwargs.get('load_model', False)
-        self.path = kwargs['dir_path'] + kwargs['name'] + '/'
-        self.saver = None
+        self._save = kwargs.get('save_model', False)
+        self._load = kwargs.get('load_model', False)
+        self._name = kwargs['name']
+        self._path = DIR_PATH + '/logdir/models/' + self._name + '/'
+        self._saver = None
 
     def  __call__(self): 
-        if self.save or self.load:
-            MODEL_DIR = DIR_PATH + '/logdir/models/' + self.name + '/'
-            self.saver = tf.train.Saver(max_to_keep=1)
-            if not os.path.isdir(MODEL_DIR):
-                os.mkdir(MODEL_DIR)
+        if self._save or self._load:
+            self._saver = tf.train.Saver(max_to_keep=1)
+            if not os.path.isdir(self._path):
+                os.mkdir(self._path)
 
-    def maybe_load(self, load_name):
-        if self.load:
+    def maybe_load(self, load_name, sess):
+        if self._load:
             if load_name != '':
                 LOAD_DIR = DIR_PATH + '/logdir/models/' + load_name + '/'
             else:
-                LOAD_DIR = self.path
+                LOAD_DIR = self._path
             if os.listdir(LOAD_DIR):
                 print('loading model')
-                saver.restore(sess, tf.train.latest_checkpoint(LOAD_DIR))
+                self._saver.restore(sess, tf.train.latest_checkpoint(LOAD_DIR))
                 return True
             else:
                 print('no cpk to load running with random init')
                 return False
 
+    def save(self, sess, global_step):
+        self._saver.save(sess, self._path, global_step=global_step)
+    
+    def restore(self, sess):
+        self._saver.restore(sess, tf.train.latest_checkpoint(self._path))
+
     @property
     def saver(self):
-        return self.saver
-
-
+        return self._saver
        
 def train(_model, _datahandler):
 
@@ -273,8 +278,13 @@ def train(_model, _datahandler):
     learning_rate_var = tf.Variable(args.learning_rate)
     optimizer = get_opt(learning_rate_var).minimize(loss, global_step=global_step)
 
-    train_dh = _datahandler.train_gen(HYPR_PARAMS['dup_count']*HYPR_PARAMS['batch_size'])
-    valid_dh = _datahandler.valid_gen(HYPR_PARAMS['dup_count']*HYPR_PARAMS['batch_size'])
+    batch_size = HYPR_PARAMS['batch_size'] 
+    if HYPR_PARAMS['task'] == 'multi_denoise':
+        batch_size *= HYPR_PARAMS['dup_count']
+        
+
+    train_dh = _datahandler.train_gen(batch_size)
+    valid_dh = _datahandler.valid_gen(batch_size)
 
     ###################################################################
     #                Training   +   Results
@@ -297,7 +307,7 @@ def train(_model, _datahandler):
         valid_summ_writer = tf.summary.FileWriter(tensorboard_path + args.name +
                 '_valid')
 
-        saver_mngr.maybe_load(HYPR_PARAMS['load_name'])
+        saver_mngr.maybe_load(HYPR_PARAMS['load_name'], sess)
 
         if HYPR_PARAMS.get('test', False):  # TODO: fix this
             test_batch = nextbatch(X=X_test, Y=Y_test, batch_size=5, run_once=True)
@@ -326,7 +336,6 @@ def train(_model, _datahandler):
                 train_loss.append(iter_loss)
                 epoch_loss += iter_loss
 
-
                 if b_num % 30 == 0:
                     summary = sess.run([merged, merged_only_tr], feed_dict)
                     for s in summary:
@@ -346,9 +355,8 @@ def train(_model, _datahandler):
                             mask = (Xv_batch == Yv_batch).astype(float)
                             feed_dict[encd_mask] = mask
                         iter_loss, iter_recon, enc_out, summary  = \
-                                sess.run([loss, _reconstructoin_loss, _model.output, merged], feed_dict)
-                        valid_summ_writer.add_summary(summary,
-                                global_step=global_step.eval(session=sess))
+                                sess.run([loss, _reconstructoin_loss, _model.sparsecode, merged], feed_dict)
+                        valid_summ_writer.add_summary(summary, global_step=global_step.eval(session=sess))
                         sp_out_itr += np.count_nonzero(enc_out)/enc_out.shape[0]
                         sp_in_itr += np.count_nonzero(X_batch)/Xv_batch.shape[0]
                         valid_loss += iter_loss
@@ -361,14 +369,12 @@ def train(_model, _datahandler):
 
                     if valid_loss <= np.min(validation_loss):
                         if args.save_model:
-                            f_name = MODEL_DIR + 'csc_u{}_'.format(args.unroll_count)
-                            saver.save(sess, f_name, global_step=global_step)
-                            print('saving model at: %s'%f_name) 
+                            saver_mngr.save(sess, global_step=global_step)
+                            print('saving model at: %s'%saver_mngr._name) 
                     if len(validation_loss)  > 5:
                         if (valid_loss > validation_loss[-2]).all():
                             learning_rate_var *= 0.9
-                            print('loading model %s'%MODEL_DIR)
-                            saver.restore(sess, tf.train.latest_checkpoint(MODEL_DIR))
+                            saver_mngr.restore(sess)
                             print('decreasing learning_rate to\
                                     {}'.format(learning_rate_var.eval()))
                     print('valid loss: %f recon loss: %f encoded sparsity: %f' %
@@ -451,20 +457,20 @@ def main():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Sparse encoder decoder model')
-    parser.add_argument('-b', '--batch_size', default=2,
+    parser.add_argument('-b', '--batch_size', default=10,
                                 type=int, help='size of train batches')
     parser.add_argument('-n', '--num_epochs', default=1, type=int,
                                 help='number of epochs steps')
-    parser.add_argument('-ks', '--kernel_size', default=5, type=int,
+    parser.add_argument('-ks', '--kernel_size', default=7, type=int,
                                 help='kernel size to be used in lista_conv')
-    parser.add_argument('-kc', '--kernel_count', default=36, type=int,
+    parser.add_argument('-kc', '--kernel_count', default=64, type=int,
                                 help='amount of kernel to use in lista_conv')
     parser.add_argument('--dilate', '-dl', action='store_true')
-    parser.add_argument('-u', '--unroll_count', default=10,
+    parser.add_argument('-u', '--unroll_count', default=3,
          type=int, help='Amount of Reccurent timesteps for decoder')
     parser.add_argument('--shrinkge_type', default='soft thresh',
                             choices=['soft thresh', 'smooth soft thresh'])
-    parser.add_argument('--learning_rate', '-lr', default=0.0001, type=float, help='learning rate')
+    parser.add_argument('--learning_rate', '-lr', default=0.001, type=float, help='learning rate')
     parser.add_argument('--save_model', dest='save_model', action='store_true')
     parser.add_argument('--load_model', dest='load_model', action='store_true')
     parser.add_argument('--debug', dest='debug', action='store_true')
@@ -479,8 +485,8 @@ if __name__ == '__main__':
     parser.add_argument('--ms_ssim', '-ms',  default=0.0, type=float)
     parser.add_argument('--dup_count', '-dc',  default=2, type=int)
     parser.add_argument('--load_pretrained_dict', action='store_true', help='inilize dict with pre traindict in "./pretrained_dict" dir')
-    parser.add_argument('--dont_train_dict', action='store_true',  help='how many epochs to wait train dict -1 means dont train')
-    parser.add_argument('--task',  default='multi_denoise', choices=['deniose', 'inpaint', 'mutli_deniose'], 
+    parser.add_argument('--dont_train_dict', action='store_true',  help='how many epochs to wait train dict 0 means dont train')
+    parser.add_argument('--task',  default='multi_denoise', choices=['denoise', 'inpaint', 'multi_denoise'], 
             help='add noise to input')
     parser.add_argument('--grayscale',  action='store_true', help='converte RGB images to grayscale')
     parser.add_argument('--inpaint_keep_prob', '-p', type=float, default=0.5,

@@ -43,6 +43,8 @@ class DataHandlerBase(DataLoader):
         elif kwargs['task'] == 'inpaint':
             DS_ARGS['inpaint_keep_prob'] = kwargs['inpaint_keep_prob']
             return DataHandlerInpaint(**DS_ARGS)
+        else:
+            raise BadDsNameOrPath()
 
     @abstractmethod
     def train_gen(self, batch_size):
@@ -143,6 +145,7 @@ class DataHandlerNoise(DataHandlerBase):
         return data_n
 
     def xy_gen(self, target, batch_size, run_once):
+        print(batch_size)
         """Add noise to targer im yeild batches"""
         data_in =  self.preprocess_data(data=target)
         batch = self.Batch(batch_size, data_in, target, run_once)
