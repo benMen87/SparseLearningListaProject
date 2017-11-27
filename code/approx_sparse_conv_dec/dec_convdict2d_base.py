@@ -12,7 +12,7 @@ import numpy as np
 
 
 class DecConvDict2dBase(object):
-    
+
     __metaclass__ = ABCMeta
 
     def __init__(self, init_val, output_size):

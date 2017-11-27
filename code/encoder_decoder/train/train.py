@@ -12,104 +12,14 @@ import matplotlib.pyplot as plt
 import scipy.io as scio
 
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))+'/../'
-sys.path.append(os.path.abspath(DIR_PATH + '/../'))
+sys.path.append(os.path.abspath(DIR_PATH))
+sys.path.append(os.path.abspath(DIR_PATH) + '/../')
 
 from approx_sae.approx_conv2d_sparse_ae import ApproxCSC
 from approx_sae import approx_sae_losses
 from Utils import data_handler
 from Utils import ms_ssim
-from Utils.psnr import psnr as psnr
-
-
-######################################################
-#   Plot and save test image
-######################################################
-def savetstfig(sess, encoder, decoder, inputim, targetim, fname):
-
-    Xhat = decoder.output
-    feed_dict = {encoder.input: inputim}
-    if args.inpaint:
-        feed_dict[encd_mask] =  (inputim == targetim).astype(float)
-    Z, im_hat = sess.run([encoder.output, Xhat], feed_dict)
-
-    # im_hat /= np.max(im_hat)
-    np.clip(im_hat, 0, 1)  # clip values
-    example_ims = DIR_PATH + 'logdir/data/' + fname
-    f, axarr = plt.subplots(2, 2)
-    np.savez(example_ims, X=inputim, Y=targetim, Z=Z, IM_hat=im_hat)
-
-    cmap = 'gray' #if args.grayscale else 'viridis'
-    print('saved example img data de/en at %s' % example_ims)
-
-    axarr[0, 1].axis('off')
-
-    axarr[0,0].imshow(np.squeeze(targetim), cmap=cmap)
-    axarr[0,0].set_title('original image')
-    axarr[0,0].axis('off')
-
-    axarr[1,1].imshow(np.squeeze(inputim), cmap=cmap)
-    axarr[1,1].set_title('noisy image -  psnr: {0:.3} [db]'.format(psnr(targetim, inputim)))
-    axarr[1,1].axis('off')
-
-    axarr[1,0].imshow(np.squeeze(im_hat), cmap=cmap)
-    axarr[1,0].set_title('reconstructed image -  psnr: {0:.3}\
-            [db]'.format(psnr(targetim, im_hat)))
-    axarr[1,0].axis('off')
-
-    example_ims = DIR_PATH + 'logdir/plots/' + fname + '.png'
-    f.savefig(example_ims)
-    plt.close()
-
-    #### TEMP remove ####
-    fig = plt.figure(frameon=False)
-    ax = plt.Axes(fig, [0., 0., 1., 1.])
-    ax.set_axis_off()
-    fig.add_axes(ax)
-    ax.imshow(np.squeeze(im_hat), cmap=cmap, aspect='normal')
-    fig.savefig('result_im', bbox_inches='tight', pad_inches=0)
-
-    fig = plt.figure(frameon=False)
-    ax = plt.Axes(fig, [0., 0., 1., 1.])
-    ax.set_axis_off()
-    fig.add_axes(ax)
-    ax.imshow(np.squeeze(inputim), cmap=cmap, aspect='normal')
-    fig.savefig('noise_im', bbox_inches='tight', pad_inches=0)
-    print('saved example img plot de/en at %s' % example_ims)
-    scio.savemat('res_mat', {'z': np.squeeze(inputim), 'recon':
-        np.squeeze(im_hat), 'y': np.squeeze(targetim)})
-
-def test(encoder, decoder, batch, loss=None):
-    test_loss = 0
-    recon_loss = 0
-    test_iter = 0
-    print('batch size {}'.format(args.batch_size))
-
-    for X_batch, Y_batch in test_batch:
-
-        feed_dict = {encoder.input: X_batch, decoder.target: Y_batch}
-        if args.inpaint:
-            mask = (X_batch == Y_batch).astype(float)
-            feed_dict[encd_mask] = mask
-        test_loss += sess.run(loss, feed_dict)
-        recon_loss += sess.run(_reconstruction_loss, feed_dict)
-        test_iter += 1
-
-    if test_iter:
-        test_loss, recon_loss = test_loss/test_iter, recon_loss/test_iter
-
-    # for debug save We/Wd
-    We_Wd = DIR_PATH + 'logdir/data/We_Wd'
-    We, Wd, theta = sess.run([encoder._We, encoder._Wd, encoder._theta])
-    np.savez(We_Wd, Wd=Wd, We=We, theta=theta)
-
-    # plot example image
-    for ex_i in range(min(20, len(X_test))):
-        # i = np.random.randint(X_test.shape[0], size=1)
-        x = X_test[[ex_i], :]
-        y = Y_test[[ex_i], :]
-        savetstfig(sess, encoder, decoder, x, y, 'example'+str(ex_i))
-
-    return test_loss, recon_loss
+from evaluate import evaluate
 
 #######################################################
 #   Training Vars - optimizers and batch generators
@@ -166,8 +76,8 @@ def config_train_tb(_encoder, _decoder):
         variable_summaries(_decoder.convdict)
     with tf.name_scope('sparse_code'):
         variable_summaries(_encoder.output)
-    tf.summary.scalar('encoded_sparsity', 
-        tf.reduce_mean(tf.count_nonzero(_encoder.output, axis=[1,2,3])))
+    tf.summary.scalar('encoded_sparsity',
+         tf.reduce_mean(tf.count_nonzero(_encoder.output, axis=[1,2,3])))
     tf.summary.image('input', _encoder.input)
     tf.summary.image('output', _decoder.output)
     tf.summary.image('target', _decoder.target)
@@ -185,18 +95,18 @@ def reconstruction_loss(_model):
         dist_loss = approx_sae_losses.l1(_out=out, _target=target, _boundry=boundry)
         tf.summary.scalar('dist_l1', dist_loss, collections=['TB_LOSS'])
     elif HYPR_PARAMS['disttyp'] == 'smooth_l1':
-       dist_loss = approx_sae_losses.smooth_l1(_out=_out, _target=_target, _boundry=boundry)
-       tf.summary.scalar('dist_smoothl1', dist_loss, collections=['TB_LOSS'])
+        dist_loss = approx_sae_losses.smooth_l1(_out=_out, _target=_target, _boundry=boundry)
+        tf.summary.scalar('dist_smoothl1', dist_loss, collections=['TB_LOSS'])
     elif HYPR_PARAMS['disttyp'] == 'l2':
-       dist_loss = approx_sae_losses.l2(_out=out, _target=target, _boundry=boundry)
-       tf.summary.scalar('dist_l2', dist_loss, collections=['TB_LOSS'])
+        dist_loss = approx_sae_losses.l2(_out=out, _target=target, _boundry=boundry)
+        tf.summary.scalar('dist_l2', dist_loss, collections=['TB_LOSS'])
 
     if HYPR_PARAMS['ms_ssim']:
         half_ker = _model.encoder.kernel_size // 2
         _ms_ssim = ms_ssim.tf_ms_ssim(
-                target[:,half_ker:-half_ker,half_ker:-half_ker,...],
-                out[:,half_ker:-half_ker,half_ker:-half_ker,...],
-                level=4
+            target[:,half_ker:-half_ker,half_ker:-half_ker,...],
+            out[:,half_ker:-half_ker,half_ker:-half_ker,...],
+            level=4
         )
         tf.summary.scalar('ms_ssim', _ms_ssim, collections=['TB_LOSS'])
     return dist_loss, (1 - _ms_ssim)
@@ -248,7 +158,7 @@ class Saver():
 
     def save(self, sess, global_step):
         self._saver.save(sess, self._path, global_step=global_step)
-    
+
     def restore(self, sess):
         self._saver.restore(sess, tf.train.latest_checkpoint(self._path))
 
@@ -278,23 +188,19 @@ def train(_model, _datahandler):
     learning_rate_var = tf.Variable(args.learning_rate)
     optimizer = get_opt(learning_rate_var).minimize(loss, global_step=global_step)
 
-    batch_size = HYPR_PARAMS['batch_size'] 
+    batch_size = HYPR_PARAMS['batch_size']
     if HYPR_PARAMS['task'] == 'multi_denoise':
         batch_size *= HYPR_PARAMS['dup_count']
-        
 
     train_dh = _datahandler.train_gen(batch_size)
     valid_dh = _datahandler.valid_gen(batch_size)
+    test_dh = _datahandler.test_gen(10)
 
     ###################################################################
     #                Training   +   Results
     ###################################################################
-    train_loss = []
     validation_loss = []
     valid_sparsity_out = []
-    valid_sparsity_in = []
-    epoch_loss = 0
-
     with tf.Session() as sess:
 
         tf.global_variables_initializer().run(session=sess)
@@ -333,7 +239,6 @@ def train(_model, _datahandler):
                     mask = (X_batch == Y_batch).astype(float)
                     feed_dict[encd_mask] = mask
                 _, iter_loss = sess.run([optimizer, loss], feed_dict)
-                train_loss.append(iter_loss)
                 epoch_loss += iter_loss
 
                 if b_num % 30 == 0:
@@ -344,10 +249,10 @@ def train(_model, _datahandler):
                 if b_num % 30 == 0:
                     valid_loss = 0
                     v_itr = 0
-                    sp_in_itr = 0
                     sp_out_itr = 0
                     l1 = 0
                     recon = 0
+
                     for Xv_batch, Yv_batch in valid_dh:
                         v_itr += 1
                         feed_dict = {_model.input: Xv_batch, _model.target: Yv_batch}
@@ -358,79 +263,37 @@ def train(_model, _datahandler):
                                 sess.run([loss, _reconstructoin_loss, _model.sparsecode, merged], feed_dict)
                         valid_summ_writer.add_summary(summary, global_step=global_step.eval(session=sess))
                         sp_out_itr += np.count_nonzero(enc_out)/enc_out.shape[0]
-                        sp_in_itr += np.count_nonzero(X_batch)/Xv_batch.shape[0]
                         valid_loss += iter_loss
                         recon += iter_recon
                     valid_loss /= v_itr
                     recon /= v_itr
+
                     validation_loss.append(valid_loss)
-                    valid_sparsity_out.append(sp_out_itr/v_itr)
-                    valid_sparsity_in.append(sp_in_itr/v_itr)
+                    valid_sparsity_out = sp_out_itr/v_itr
 
                     if valid_loss <= np.min(validation_loss):
                         if args.save_model:
                             saver_mngr.save(sess, global_step=global_step)
                             print('saving model at: %s'%saver_mngr._name) 
                     if len(validation_loss)  > 5:
-                        if (valid_loss > validation_loss[-2]).all():
+                        if (valid_loss > validation_loss[-5:]).all():
                             learning_rate_var *= 0.9
                             saver_mngr.restore(sess)
                             print('decreasing learning_rate to\
                                     {}'.format(learning_rate_var.eval()))
                     print('valid loss: %f recon loss: %f encoded sparsity: %f' %
-                        (valid_loss, recon, valid_sparsity_out[-1]))
+                        (valid_loss, recon, valid_sparsity_out))
             print('epoch %d: loss val:%f' % (epoch, args.batch_size  * epoch_loss / X_train.shape[0]))
 
-        print('='*40)
-        decoder_filters = decoder.convdict.eval()
-        decoder_filters_path = DIR_PATH + 'logdir/data/decoder_filters'
-        np.save(decoder_filters_path, decoder_filters)
-        print('saved decoder filters at path: %s' % decoder_filters_path)
-
-        test_batch = nextbatch(X=X_test, Y=Y_test, batch_size=5, run_once=True)
-        test_loss, test_recon_loss = test(encoder, decoder, test_batch, loss)
-        if args.test_fruits:
-            X_fruit = load_images.load_fruit(args.grayscale)
-            Y_fruit = np.empty(shape=X_fruit.shape)
-            Y_fruit[:] = X_fruit[:]
-            X_fruit = preprocess_data(X_fruit, args.add_noise, noise_sigma, args.inpaint, args.inpaint_keep_prob, args.whiten)
-
-            Y_fruit = preprocess_data(Y_fruit, whiten=args.whiten)
-
-            for i, (xfruit, yfruit)  in enumerate(zip(X_fruit, Y_fruit)):
-                savetstfig(sess, encoder, decoder, xfruit[np.newaxis, :], yfruit[np.newaxis, :], 'fruit'+str(i))
-
-
-    plt.figure()
-    plt.plot(range(len(train_loss) - 1), train_loss[1:])
-    plt.ylabel('loss')
-    plt.xlabel('#iter')
-    plt.title('train loss')
-    fig_path = DIR_PATH + 'logdir/plots/trainloss'
-    plt.savefig(fig_path)
-    print('plot saved in path: %s' % fig_path)
-
-    plt.figure()
-    plt.plot(range(len(validation_loss) - 1), validation_loss[1:])
-    plt.ylabel('loss')
-    plt.xlabel('#iter')
-    fig_path = DIR_PATH + 'logdir/plots/validloss'
-    plt.savefig(fig_path)
-    print('plot saved in path: %s' % fig_path)
-
-    plt.figure()
-    plt.plot(range(len(valid_sparsity_out)),  valid_sparsity_out, 'r', label='sparsity of encoded  image')
-    plt.plot(range(len(valid_sparsity_in)), valid_sparsity_in, 'g', label='sparsity of original image')
-    plt.legend(loc='upper right')
-    sc_plot = DIR_PATH + 'logdir/plots/sparsity.png'
-    plt.savefig(sc_plot)
-    np.savez(DIR_PATH + 'logdir/data/sparse', IN=valid_sparsity_in, EN=valid_sparsity_out)
-    print('plot of sparsity input vs encode in %s' % sc_plot)
-
+        #run test
+        save_path = DIR_PATH + '/logdir/'
+        test_loss = evaluate.test(sess, _model, test_dh, loss, save_path)
+        decoder_filters = np.squeeze(_model.decoder.convdict.eval(session=sess))
+    
+    print('='*40 + '\nTEST LOSS {}\n'.format(test_loss) + '='*40)
     plt.figure()
     plot_num = np.sqrt(args.kernel_count)
     fid = 0
-    decoder_filters = np.squeeze(decoder_filters)
     for f in decoder_filters.T:
         plt.subplot(plot_num, plot_num, fid+1)
         cmap = 'gray' if len(f.shape) == 2 else 'classic'
@@ -439,18 +302,15 @@ def train(_model, _datahandler):
     plt.savefig(DIR_PATH + 'logdir/plots/filters.png')
     print('seved plot of dict filter atoms in {}'.format(DIR_PATH + 'logdir/plots/filters.png'))
 
-    print('='*40)
-    print('test loss: %f recon loss: %f' % (test_loss, test_recon_loss))
-
 def main():
     dh = data_handler.DataHandlerBase.factory(norm_val=255, **HYPR_PARAMS)
     model  = ApproxCSC()
     model.build_model(
-        unroll_count=args.unroll_count,
-        L=1, batch_size=args.batch_size,
-        kernel_size=args.kernel_size,
-        shrinkge_type=args.shrinkge_type,
-        kernel_count=args.kernel_count,
+        unroll_count=HYPR_PARAMS['unroll_count'],
+        L=1, batch_size=HYPR_PARAMS['batch_size'],
+        kernel_size=HYPR_PARAMS['kernel_size'],
+        shrinkge_type=HYPR_PARAMS['shrinkge_type'],
+        kernel_count=HYPR_PARAMS['kernel_count'],
         channel_size=dh.shape[-1]
     )
     train(_datahandler=dh, _model=model)
@@ -459,7 +319,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Sparse encoder decoder model')
     parser.add_argument('-b', '--batch_size', default=10,
                                 type=int, help='size of train batches')
-    parser.add_argument('-n', '--num_epochs', default=1, type=int,
+    parser.add_argument('-n', '--num_epochs', default=0, type=int,
                                 help='number of epochs steps')
     parser.add_argument('-ks', '--kernel_size', default=7, type=int,
                                 help='kernel size to be used in lista_conv')
@@ -480,7 +340,7 @@ if __name__ == '__main__':
             load from a model with "name" diffrent from this model name')
     parser.add_argument('--dataset', default='pascal_small', choices=['mnist','stl10', 'cifar10', 'pascal', 'pascal_small'])
     parser.add_argument('--sparse_factor', '-sf',  default=0.5, type=float)
-    parser.add_argument('--sparse_sim_factor',  default=0.1, type=float)
+    parser.add_argument('--sparse_sim_factor',  default=0, type=float)
     parser.add_argument('--recon_factor', '-rf',  default=1.0, type=float)
     parser.add_argument('--ms_ssim', '-ms',  default=0.0, type=float)
     parser.add_argument('--dup_count', '-dc',  default=2, type=int)

@@ -198,6 +198,10 @@ class LISTAConvDict2dBase(object):
         return self._We
 
     @property
+    def theta(self):
+        return self._theta
+
+    @property
     def mask(self):
         return self._mask
 

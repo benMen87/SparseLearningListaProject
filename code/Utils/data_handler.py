@@ -88,12 +88,14 @@ class DataHandlerBase(DataLoader):
 
 
     class Batch():
-        def __init__(self, batch_size, data, target=None, run_once=False):
+        def __init__(self, batch_size, data, target=None, run_once=False, use_mask=False):
             self.batch_size = batch_size
             self.batch_num = 0
             self.epoch = 0
             self.data = data
             self.target = target
+            self._use_mask = use_mask
+            self.curr_batch = (None, None)
             self.data_len = len(data)
             self.batchs_per_epoch = np.ceil(float(self.data_len) / self.batch_size) 
             self.run_once = run_once
@@ -105,22 +107,27 @@ class DataHandlerBase(DataLoader):
 
             if self.data_len == 0:
                 raise  DataNotLoadedException('No data')
-            
             s, e = self.start_end()
             if self.batch_num < self.batchs_per_epoch:
-                b = (self.data[s:e], self.target[s:e])
+                self.curr_batch = (self.data[s:e], self.target[s:e])
             else:
                 self.rewind()
                 if self.run_once:
                     raise StopIteration()
                 else:
-                    b = (self.data[s:e], self.target[s:e])
+                    self.curr_batch = (self.data[s:e], self.target[s:e])
             self.batch_num += 1
-            return b   
+            return self.curr_batch   
         
         def rewind(self):
             self.epoch += 1
             self.batch_num = 0
+        
+        def mask(self):
+            if self._use_mask:
+                return (self.curr_batch[0] == self.curr_batch[1]).astype(float)
+            else:
+                return 1
 
         def start_end(self):
             start = self.batch_size * self.batch_num

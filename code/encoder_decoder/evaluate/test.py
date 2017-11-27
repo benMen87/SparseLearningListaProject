@@ -15,6 +15,7 @@ MODEL_DIR = \
 IMAGES_DIR = '/home/hillel/projects/supplement/reconstruction/test_set/'
 
 
+
 def rgb2gray(X):
     if X.shape[-1] == 1:
         return X
