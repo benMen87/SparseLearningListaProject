@@ -37,4 +37,4 @@ class DecConvMultiDict2d(DecConvDict2dBase):
     
     def _init_cd(self, init_val):
         self._cd = tf.Variable(init_val, name='decoder')
-        self._cd = [tf.nn.l2_normalize(self._cd, dim=[0, 1], name='normilized_dict') 
+        self._cd = tf.nn.l2_normalize(self._cd, dim=[0, 1], name='normilized_dict') 
