@@ -32,17 +32,11 @@ class LISTAConvMultiDict2d(lista_convdict2d_base.LISTAConvDict2dBase):
 
 
     def _conv2d_enc(self, _val, _name='enc'):
-        _We = [tf.nn.l2_normalize(0.001 * we, [0,1]) for we in self._We ]
-        res = _val
-        for we in _We:
-            res = self.conv2d(res, we, _name)
+        res = self.conv2d(res, self._We, _name)
         return res
 
     def _conv2d_dec(self, _val, _name):
-        _Wd = [tf.nn.l2_normalize(wd, [0,1]) for wd in self._Wd]
-        res = _val
-        for wd in _Wd:
-            res = self.conv2d(res, wd, _name) 
+        res = self.conv2d(res, self._Wd, _name) 
         return res
      
     def conv2d(self, _value, _filters, _name, _dilate=False, _rate=[1, 2, 3]):
@@ -120,8 +114,8 @@ class LISTAConvMultiDict2d(lista_convdict2d_base.LISTAConvDict2dBase):
             b = [tf.Variable(tf.fill([1, self.amount_of_kernals], 0.5), name='b'+str(u))
                        for u in range(unroll_count)]
             self._theta = zip(beta, b)
-        self._We = self.build_we(expand_amount=2)
-        self._Wd = [tf.Variable(tf.transpose(tf.reverse(self._We,
-            [0,1]), [0,1,3,2]), name='Wd') for we in reversed(self._We)]
+        self._We = 0.1 * tf.nn.l2_normalized(self.build_we(expand_amount=2), [0,1])
+        self._Wd = tf.nn.l2_normalize(tf.Variable(tf.transpose(tf.reverse(self._We,
+            [0,1]), [0,1,3,2]), name='Wd'), dim=[0,1])
         print self._We.shape
 
