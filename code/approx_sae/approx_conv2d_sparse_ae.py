@@ -11,6 +11,7 @@ import tensorflow as tf
 from abc import ABCMeta, abstractmethod
 
 from approx_sparse_conv_enc import lista_convdict2d
+from approx_sparse_conv_enc import lista_multiconvdict2d
 from approx_sparse_conv_dec import dec_convdict2d
 
 class AutoEncoderBase(object):
@@ -43,13 +44,11 @@ class AutoEncoderBase(object):
             raise NotInitlizedError('variable {} is not inilized. (run "build_model" first)')
         else:
             return _val
-   
-    
-    
-class ApproxCSC(AutoEncoderBase):
-    LEGALE_TPYES = ['classic']
 
-    def __init__(self, type='classic', **kwargs):
+class ApproxCSC(AutoEncoderBase):
+    LEGALE_TPYES = ['convdict', 'convmultidict']
+
+    def __init__(self, type='convmultidict', **kwargs):
         super(ApproxCSC, self).__init__()
 
         if type not in self.LEGALE_TPYES:
@@ -84,8 +83,10 @@ class ApproxCSC(AutoEncoderBase):
 
     # CREATING MODEL
     def _get_encoder(self, **encargs):
-        if self._type == 'classic':
+        if self._type == 'convdict':
             encoder_fn = lista_convdict2d.LISTAConvDict2d
+        elif self._type == 'convmultidict':
+            encoder_fn = lista_multiconvdict2d.LISTAConvMultiDict2d
         else:
             # shouldn't reach here
             raise SystemError("Shouldn't reach here")
@@ -94,8 +95,10 @@ class ApproxCSC(AutoEncoderBase):
         return encoder
 
     def _get_decoder(self, **decargs):
-        if self._type == 'classic':
+        if self._type == 'convdict': 
             decoder_fn = dec_convdict2d.DecConvDict2d
+        elif self._type == 'convmultidict':
+            decoder_fn = dec_convdict2d.DecConvMultiDict2d
         else:
             # shouldnt reach here
             raise SystemError("Shouldn't reach here")
@@ -116,7 +119,7 @@ class ApproxCSC(AutoEncoderBase):
         self._encoder.build_model()
 
         _decargs = {
-            'init_val':self._encoder.Wd.initialized_value(),
+                'init_val':self._encoder.Wd, # TODO: Fix this.initialized_value(),
             'output_size':self._encoder.inputshape
         }
         self._decoder = self._get_decoder(**_decargs)

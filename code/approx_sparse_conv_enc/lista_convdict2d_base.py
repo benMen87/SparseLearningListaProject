@@ -22,6 +22,7 @@ class LISTAConvDict2dBase(object):
             inputshape: Input X is encoded using conv2D(We, X).
             unroll_size: Amount of times to repeat lcod block.
         """
+        print kwargs
         self._unroll_count = unroll_count
         self.inputshape = kwargs.get('inputshape', None)
         self._batch_size = kwargs.get('batch_size', None)
@@ -65,7 +66,8 @@ class LISTAConvDict2dBase(object):
         init_We = tf.nn.l2_normalize(tf.truncated_normal([self.kernel_size, self.kernel_size,
                                       self.input_channels, self.amount_of_kernals]), dim=[0,1])
         self._We = tf.Variable(init_We, name='We')
-        self._Wd = tf.Variable(tf.transpose(tf.reverse(self._We.initialized_value(), [0,1]), [0,1,3,2]), name='We')
+        self._Wd = tf.Variable(tf.transpose(tf.reverse(init_We,
+            [0,1]), [0,1,3,2]), name='Wd')
 
     def init_from_param_dict(self, init_params_dict):
         """
@@ -160,7 +162,7 @@ class LISTAConvDict2dBase(object):
             _val=X,
             _name='bias'
             ) 
-        self._Z = shrinkge_fn(B, self._theta, 'Z_0')
+        self._Z = shrinkge_fn(B, self.theta, 'Z_0')
         tf.add_to_collection('SC_Zt', self._Z)
         #
         # run unrolling
@@ -181,7 +183,7 @@ class LISTAConvDict2dBase(object):
             res_add_bias = res + B
             self._Z = shrinkge_fn(
                 res_add_bias,
-                self._theta,
+                self.theta,
                 'Z_'+str(t)
                 )
             tf.add_to_collection('SC_Zt', self._Z)

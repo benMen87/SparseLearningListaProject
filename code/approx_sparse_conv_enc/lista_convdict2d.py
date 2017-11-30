@@ -18,14 +18,14 @@ class LISTAConvDict2d(lista_convdict2d_base.LISTAConvDict2dBase):
             self, unroll_count,
             inputshape=None,
             batch_size=None,
-            channel_size=3,
+            input_channels=1,
             shrinkge_type='soft_thresh',
             **kwargs
             ):
 
         kwargs['inputshape'] = inputshape
         kwargs['batch_size'] = batch_size
-        kwargs['channel_size'] = channel_size
+        kwargs['input_channels'] = input_channels
         kwargs['shrinkge_type'] = shrinkge_type
 
         super(LISTAConvDict2d, self).__init__(

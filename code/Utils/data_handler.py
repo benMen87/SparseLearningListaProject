@@ -153,7 +153,7 @@ class DataHandlerNoise(DataHandlerBase):
 
     def xy_gen(self, target, batch_size, run_once):
         print(batch_size)
-        """Add noise to targer im yeild batches"""
+        """Add noise to target in yeild batches"""
         data_in =  self.preprocess_data(data=target)
         batch = self.Batch(batch_size, data_in, target, run_once)
         return batch

@@ -60,24 +60,24 @@ def variable_summaries(var):
     tf.summary.scalar('min', tf.reduce_min(var))
     tf.summary.histogram('histogram', var)
 
-def config_train_tb(_encoder, _decoder):
+def config_train_tb(_encoder, _decoder, add_stats=False):
     tensorboard_path = '/data/hillel/tb/' + HYPR_PARAMS['name'] + '/'
     if not os.path.isdir(tensorboard_path):
         os.mkdir(tensorboard_path)
-
-    with tf.name_scope('encoder'):
-        with tf.name_scope('We'):
-            variable_summaries(_encoder._We)
-        with tf.name_scope('Wd'):
-            variable_summaries(_encoder._Wd)
-        with tf.name_scope('threshold'):
-            variable_summaries(_encoder._theta)
-    with tf.name_scope('decoder'):
-        variable_summaries(_decoder.convdict)
-    with tf.name_scope('sparse_code'):
-        variable_summaries(_encoder.output)
-    tf.summary.scalar('encoded_sparsity',
-         tf.reduce_mean(tf.count_nonzero(_encoder.output, axis=[1,2,3])))
+    if add_stats:
+        with tf.name_scope('encoder'):
+            with tf.name_scope('We'):
+                variable_summaries(_encoder._We)
+            with tf.name_scope('Wd'):
+                variable_summaries(_encoder._Wd)
+            with tf.name_scope('threshold'):
+                variable_summaries(_encoder._theta)
+        with tf.name_scope('decoder'):
+            variable_summaries(_decoder.convdict)
+        with tf.name_scope('sparse_code'):
+            variable_summaries(_encoder.output)
+        tf.summary.scalar('encoded_sparsity',
+             tf.reduce_mean(tf.count_nonzero(_encoder.output, axis=[1,2,3])))
     tf.summary.image('input', _encoder.input)
     tf.summary.image('output', _decoder.output)
     tf.summary.image('target', _decoder.target)
@@ -202,7 +202,7 @@ def train(_model, _datahandler):
     validation_loss = []
     valid_sparsity_out = []
     with tf.Session() as sess:
-
+        
         tf.global_variables_initializer().run(session=sess)
         print('Initialized')
 
@@ -224,8 +224,6 @@ def train(_model, _datahandler):
         if args.debug:
             sess = tf_debug.LocalCLIDebugWrapperSession(sess)
             sess.add_tensor_filter("has_inf_or_nan", tf_debug.has_inf_or_nan)
-            sess.add_tensor_filter("all_zero", all_zero)
-
         print('number of epochs %d'%args.num_epochs)
         for epoch in range(1, args.num_epochs + 1):
             epoch_loss = 0
@@ -234,6 +232,7 @@ def train(_model, _datahandler):
 
             for X_batch, Y_batch in train_dh:
                 b_num += 1
+                iter_loss = 0
                 feed_dict = {_model.input: X_batch, _model.target: Y_batch}
                 if HYPR_PARAMS['task'] == 'inpaint':
                     mask = (X_batch == Y_batch).astype(float)
@@ -319,7 +318,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Sparse encoder decoder model')
     parser.add_argument('-b', '--batch_size', default=10,
                                 type=int, help='size of train batches')
-    parser.add_argument('-n', '--num_epochs', default=0, type=int,
+    parser.add_argument('-n', '--num_epochs', default=1, type=int,
                                 help='number of epochs steps')
     parser.add_argument('-ks', '--kernel_size', default=7, type=int,
                                 help='kernel size to be used in lista_conv')
