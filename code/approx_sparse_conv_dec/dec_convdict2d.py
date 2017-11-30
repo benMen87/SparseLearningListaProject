@@ -36,17 +36,5 @@ class DecConvMultiDict2d(DecConvDict2dBase):
         super(DecConvMultiDict2d, self).__init__(init_val, output_shape)
     
     def _init_cd(self, init_val):
-        self._cd = [tf.Variable(_v.initialized_value(), name='decoder') for _v in init_val]
-        self._cd = [tf.nn.l2_normalize(_cd, dim=[0, 1],
-            name='normilized_dict') for _cd in self._cd]
-
-    def reconstruct(self, _sc):
-        res = _sc
-        for _cd in self._cd:
-            res =  tf.nn.conv2d(
-                res,
-                _cd,
-                strides=[1, 1, 1, 1],
-                padding='SAME'
-                )
-        return res
+        self._cd = tf.Variable(init_val, name='decoder')
+        self._cd = [tf.nn.l2_normalize(self._cd, dim=[0, 1], name='normilized_dict') 

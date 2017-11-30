@@ -57,6 +57,44 @@ class LISTAConvMultiDict2d(lista_convdict2d_base.LISTAConvDict2dBase):
                 name=_name
             )
         return res
+    
+    def expand_perseptive_field(self, filter_list):
+        """expand reseptive feild of filter.
+
+       Expand reseptive field for each filter in filter_list,
+       by convolving 'FULL' each filter with itself with a reflective padding. 
+               
+        Arguments:
+            filter_list {list} -- list of filter.
+        
+        Returns:
+            filter_list_expand {list} -- list of expanded resptive feild filters.
+        """
+        
+        filter_list_expand = []
+        pad_sz = self.kernel_size // 2
+        for f in filter_list:
+            pad_f = tf.expand_dims(tf.pad(f, [[pad_sz, pad_sz], [pad_sz, pad_sz], [0, 0]], "REFLECT" ), 0)
+            f = tf.expand_dims(f, axis=-1)
+            filter_list_expand.append(tf.nn.conv2d(pad_f, f, strides=[1,1,1,1], padding='SAME'))
+        return filter_list_expand
+
+    def build_we(self, expand_amount=2):
+        """Build encoder (dict transpose)
+        
+        Build encoder (dict transpose), creat initlial filter sizes then expand perseptive field expand_times.
+        Each expand time filter is expanded f_size // 2.        
+        Keyword Arguments:
+            expand_amount {int} -- amount of time to call expand_presptive_field (default: {2})
+        """
+        
+        init_We = [
+            tf.Variable(tf.truncated_normal([self.kernel_size, self.kernel_size, self.input_channels])) for _ in self.amount_of_kernals
+            ]
+        for _ in range(expand_amount):
+            init_We = self.expand_perseptive_field(init_We)
+        return init_We
+
  
     def init_random_ista_coherent(self, kwargs):
         """
@@ -82,9 +120,8 @@ class LISTAConvMultiDict2d(lista_convdict2d_base.LISTAConvDict2dBase):
             b = [tf.Variable(tf.fill([1, self.amount_of_kernals], 0.5), name='b'+str(u))
                        for u in range(unroll_count)]
             self._theta = zip(beta, b)
-        init_We = [tf.nn.l2_normalize(tf.truncated_normal([self.kernel_size,
-            self.kernel_size, d0, d1]), dim=[0,1]) for d0, d1 in ker_shapes ]
-        self._We = [tf.Variable(_init_We, name='We') for _init_We in init_We]
-        self._Wd = [tf.Variable(tf.transpose(tf.reverse(we.initialized_value(),
+        self._We = self.build_we(expand_amount=2)
+        self._Wd = [tf.Variable(tf.transpose(tf.reverse(self._We,
             [0,1]), [0,1,3,2]), name='Wd') for we in reversed(self._We)]
+        print self._We.shape
 
