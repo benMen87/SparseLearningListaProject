@@ -15,14 +15,17 @@ class DecConvDict2dBase(object):
 
     __metaclass__ = ABCMeta
 
-    def __init__(self, init_val, output_size):
-        self._init_cd(init_val)
+    def __init__(self, init_val, output_size, norm_kernal=False):
         self._target = tf.placeholder(tf.float32, shape=output_size)
         self._output = None
+        self.norm_kernal = norm_kernal
+        self._init_cd(init_val)
 
     def _init_cd(self, init_val):
         self._cd = tf.Variable(init_val, name='decoder') 
         self._cd = tf.nn.l2_normalize(self._cd, dim=[0, 1], name='normilized_dict') # keep decoder atoms with l2 norm of 1
+        if self.norm_kernal:
+            self._cd = tf.nn.l2_normalize(self._cd, dim=[0, 1], name='normilized_dict') # keep decoder atoms with l2 norm of 1
 
     @abstractmethod
     def reconstruct(self, _sc):

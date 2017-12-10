@@ -12,6 +12,7 @@ from abc import ABCMeta, abstractmethod
 
 from approx_sparse_conv_enc import lista_convdict2d
 from approx_sparse_conv_enc import lista_multiconvdict2d
+from approx_sparse_conv_enc import lista_convdict2d_untied
 from approx_sparse_conv_dec import dec_convdict2d
 
 class AutoEncoderBase(object):
@@ -46,9 +47,9 @@ class AutoEncoderBase(object):
             return _val
 
 class ApproxCSC(AutoEncoderBase):
-    LEGALE_TPYES = ['convdict', 'convmultidict']
+    LEGALE_TPYES = ['convdict', 'convmultidict', 'untied']
 
-    def __init__(self, type='convmultidict', **kwargs):
+    def __init__(self, type='convdict', **kwargs):
         super(ApproxCSC, self).__init__()
 
         if type not in self.LEGALE_TPYES:
@@ -87,6 +88,8 @@ class ApproxCSC(AutoEncoderBase):
             encoder_fn = lista_convdict2d.LISTAConvDict2d
         elif self._type == 'convmultidict':
             encoder_fn = lista_multiconvdict2d.LISTAConvMultiDict2d
+        elif self._type == 'untied':
+            encoder_fn = lista_convdict2d_untied.LISTAConvDict2dUntied
         else:
             # shouldn't reach here
             raise SystemError("Shouldn't reach here")
@@ -95,18 +98,19 @@ class ApproxCSC(AutoEncoderBase):
         return encoder
 
     def _get_decoder(self, **decargs):
-        if self._type == 'convdict': 
+        if self._type == 'convdict' or self._type == 'untied': 
             decoder_fn = dec_convdict2d.DecConvDict2d
         elif self._type == 'convmultidict':
             decoder_fn = dec_convdict2d.DecConvMultiDict2d
         else:
             # shouldnt reach here
             raise SystemError("Shouldn't reach here")
-
         with tf.variable_scope('decoder'):
-           decoder = decoder_fn(
-               decargs['init_val'],
-               decargs['output_size']
+            print(decargs)
+            decoder = decoder_fn(
+               init_val=decargs['init_val'],
+               output_shape=decargs['output_size'],
+               norm_kernal=decargs['norm_kernal']
             )
         return decoder
 
@@ -119,8 +123,9 @@ class ApproxCSC(AutoEncoderBase):
         self._encoder.build_model()
 
         _decargs = {
-                'init_val':self._encoder.Wd, # TODO: Fix this.initialized_value(),
-            'output_size':self._encoder.inputshape
+            'init_val':self._encoder.Wd, # TODO: Fix this.initialized_value(),
+            'output_size':self._encoder.inputshape,
+            'norm_kernal': self._encoder._norm_kers
         }
         self._decoder = self._get_decoder(**_decargs)
         self._decoder.build_model(_sc=self._encoder.output)

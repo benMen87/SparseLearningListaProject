@@ -22,12 +22,14 @@ class LISTAConvDict2dBase(object):
             inputshape: Input X is encoded using conv2D(We, X).
             unroll_size: Amount of times to repeat lcod block.
         """
-        print kwargs
+        print(kwargs)
         self._unroll_count = unroll_count
         self.inputshape = kwargs.get('inputshape', None)
         self._batch_size = kwargs.get('batch_size', None)
         self.input_channels = kwargs.get('input_channels', 1)
-        self._shrinkge_type = kwargs.get('shrinkge_type', 'soft_thresh')
+        self._shrinkge_type = kwargs.get('shrinkge_type', 'soft thresh')
+        self._norm_kers = kwargs.get('norm_kernal', True)
+        self.t = 0  # number of ista iteration 
 
         self._X = tf.placeholder(tf.float32, shape=(None, self.inputshape, self.inputshape, self.input_channels), name='X')
         self._mask = tf.placeholder_with_default(tf.ones_like(self._X), shape=self._X.shape, name='mask')
@@ -65,7 +67,7 @@ class LISTAConvDict2dBase(object):
 
         init_We = tf.nn.l2_normalize(tf.truncated_normal([self.kernel_size, self.kernel_size,
                                       self.input_channels, self.amount_of_kernals]), dim=[0,1])
-        self._We = tf.Variable(init_We, name='We')
+        self._We = tf.Variable(0.1 * init_We, name='We')
         self._Wd = tf.Variable(tf.transpose(tf.reverse(init_We,
             [0,1]), [0,1,3,2]), name='Wd')
 
@@ -109,12 +111,14 @@ class LISTAConvDict2dBase(object):
         self._Wd = tf.Variable(filter_arr, name='Wd', dtype=tf.float32)
 
     def _shrinkge(self):
+        print(self._shrinkge_type)
         if self._shrinkge_type == 'soft thresh':
             return self._soft_thrsh
         elif self._shrinkge_type == 'smooth soft thresh':
             return self._smooth_soft_thrsh
         else:
-            raise NotImplementedError('Double Tanh not implemented')
+            raise NotImplementedError('{} is not a valid shringe\
+                    functype'.format(self._shrinkge_type))
 
     def _smooth_soft_thrsh(self, X, theta, name=''):
         """
@@ -166,7 +170,7 @@ class LISTAConvDict2dBase(object):
         tf.add_to_collection('SC_Zt', self._Z)
         #
         # run unrolling
-        for t in range(1, self._unroll_count):
+        for self.t in range(1, self._unroll_count):
             conv_wd = self._conv2d_dec(
                 _val=self._Z,
                 _name='convWd'
@@ -184,7 +188,7 @@ class LISTAConvDict2dBase(object):
             self._Z = shrinkge_fn(
                 res_add_bias,
                 self.theta,
-                'Z_'+str(t)
+                'Z_'+str(self.t)
                 )
             tf.add_to_collection('SC_Zt', self._Z)
 
