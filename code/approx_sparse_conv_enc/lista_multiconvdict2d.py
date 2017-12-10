@@ -98,3 +98,48 @@ class LISTAConvMultiDict2d(lista_convdict2d_base.LISTAConvDict2dBase):
                 strides=[1,1,1,1], padding='SAME'), axis=0))
         return filter_list_expand
 
+   def build_we(self, expand_amount=2):
+        """Build encoder (dict transpose)
+        
+        Build encoder (dict transpose), creat initlial filter sizes then expand perseptive field expand_times.
+        Each expand time filter is expanded f_size // 2.        
+        Keyword Arguments:
+            expand_amount {int} -- amount of time to call expand_presptive_field (default: {2})
+        """
+        
+        init_We = [
+            tf.Variable(tf.truncated_normal([self.kernel_size, self.kernel_size, self.input_channels])) for _ in self.amount_of_kernals
+            ]
+        for _ in range(expand_amount):
+            init_We = self.expand_perseptive_field(init_We)
+        return init_We
+
+ 
+    def init_random_ista_coherent(self, kwargs):
+        """
+        Override base impl of init for multiple dicts
+        """
+        self.amount_of_kernals = [32, 64, 64]
+        ker_shapes = [
+            (self.input_channels, self.amount_of_kernals[0]),
+            (self.amount_of_kernals[0], self.amount_of_kernals[1]),
+            (self.amount_of_kernals[1], self.amount_of_kernals[1])]
+        self.kernel_size = kwargs.get('kernel_size', 3)
+
+        if self._shrinkge_type == 'soft thresh':
+            #TODO: Notice thresh is now shared one for each feture map
+            thrsh = kwargs.get('init_threshold', 0.1)
+            self._theta = tf.nn.relu(tf.Variable(tf.fill([1,
+                self.amount_of_kernals[-1]],
+                thrsh), name='theta'))
+          #       self.amount_of_kernals], value=0.01)), name='theta')] * unroll_count
+        elif self._shrinkge_type == 'smooth soft thresh':
+            beta = [tf.Variable(tf.fill([1, self.amount_of_kernals], 5.0), name='beta'+str(u))
+                          for u in range(unroll_count)]
+            b = [tf.Variable(tf.fill([1, self.amount_of_kernals], 0.5), name='b'+str(u))
+                       for u in range(unroll_count)]
+            self._theta = zip(beta, b)
+        self._We = 0.1 * tf.nn.l2_normalize(self.build_we(expand_amount=2), [0,1])
+        self._Wd = tf.nn.l2_normalize(tf.Variable(tf.transpose(tf.reverse(self._We,
+            [0,1]), [0,1,3,2]), name='Wd'), dim=[0,1])
+        print self._We.shape
