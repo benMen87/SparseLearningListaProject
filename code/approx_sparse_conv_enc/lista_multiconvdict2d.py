@@ -98,7 +98,7 @@ class LISTAConvMultiDict2d(lista_convdict2d_base.LISTAConvDict2dBase):
                 strides=[1,1,1,1], padding='SAME'), axis=0))
         return filter_list_expand
 
-   def build_we(self, expand_amount=2):
+    def build_we(self, expand_amount=2):
         """Build encoder (dict transpose)
         
         Build encoder (dict transpose), creat initlial filter sizes then expand perseptive field expand_times.

@@ -11,7 +11,7 @@ import time
 
 FILE_PATH = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = \
-    '/home/hillel/projects/SparseLearningListaProject/code/encoder_decoder/logdir/models/u3_ks7_kc64_L1SSIM_inpaint'
+    '/home/hillel/projects/SparseLearningListaProject/code/encoder_decoder/logdir/models/u3_kc64_ksTo2ks9_expandedPer'
 IMAGES_DIR = '/home/hillel/projects/supplement/reconstruction/test_set/'
 
 
