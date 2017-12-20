@@ -31,8 +31,6 @@ class LISTAConvDict2dBase(object):
         self._norm_kers = kwargs.get('norm_kernal', True)
         self.t = 0  # number of ista iteration 
 
-        self._X = tf.placeholder(tf.float32, shape=(None, self.inputshape, self.inputshape, self.input_channels), name='X')
-        self._mask = tf.placeholder_with_default(tf.ones_like(self._X), shape=self._X.shape, name='mask')
         #
         # model variables
         init_type = kwargs.get('init_type', 'random')
@@ -44,6 +42,12 @@ class LISTAConvDict2dBase(object):
             self.init_random_ista_coherent(kwargs)
         else:
             raise ValueError('init type: {} is not reconized'.format(init_type))
+
+    def creat_input_placeholder(self):
+        inpt = tf.placeholder(tf.float32,
+        shape=(None, self.inputshape, self.inputshape, self.input_channels),
+        name='X')
+        return inpt
 
     def init_random_ista_coherent(self, kwargs):
         """
@@ -155,13 +159,18 @@ class LISTAConvDict2dBase(object):
         decoding convolution using Wd.
         """
 
-    def build_model(self):
+    def build_model(self, inputs):
         """
         mask - In case of inpainting etc.
         """
+        self._mask = tf.placeholder_with_default(
+            tf.ones_like(inputs),
+            shape=inputs.shape,
+            name='mask'
+        )
         shrinkge_fn = self._shrinkge()
 
-        X = tf.multiply(self._X, self._mask)
+        X = tf.multiply(inputs, self._mask)
         B = self._conv2d_enc(
             _val=X,
             _name='bias'

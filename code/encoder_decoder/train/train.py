@@ -4,8 +4,6 @@ import numpy as np
 import tensorflow as tf
 import argparse
 from tensorflow.python import debug as tf_debug
-from keras.datasets import mnist, cifar10
-from keras.utils import np_utils
 import matplotlib
 #matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -60,27 +58,27 @@ def variable_summaries(var):
     tf.summary.scalar('min', tf.reduce_min(var))
     tf.summary.histogram('histogram', var)
 
-def config_train_tb(_encoder, _decoder, add_stats=False):
+def config_train_tb(_model, add_stats=False):
     tensorboard_path = '/data/hillel/tb/' + HYPR_PARAMS['name'] + '/'
     if not os.path.isdir(tensorboard_path):
         os.mkdir(tensorboard_path)
     if add_stats:
         with tf.name_scope('encoder'):
             with tf.name_scope('We'):
-                variable_summaries(_encoder._We)
+                variable_summaries(_model._encoder[-1]._We)
             with tf.name_scope('Wd'):
-                variable_summaries(_encoder._Wd)
+                variable_summaries(_model._encoder[-1]._Wd)
             with tf.name_scope('threshold'):
-                variable_summaries(_encoder._theta)
+                variable_summaries(_model._encoder[-1]._theta)
         with tf.name_scope('decoder'):
-            variable_summaries(_decoder.convdict)
+            variable_summaries(_model._decoder[-1].convdict)
         with tf.name_scope('sparse_code'):
-            variable_summaries(_encoder.output)
+            variable_summaries(_model._encoder[-1].output)
         tf.summary.scalar('encoded_sparsity',
-             tf.reduce_mean(tf.count_nonzero(_encoder.output, axis=[1,2,3])))
-    tf.summary.image('input', _encoder.input)
-    tf.summary.image('output', _decoder.output)
-    tf.summary.image('target', _decoder.target)
+             tf.reduce_mean(tf.count_nonzero(_model._encoder.output, axis=[1,2,3])))
+    tf.summary.image('input', _model.input)
+    tf.summary.image('output', _model.output)
+    tf.summary.image('target', _model.target)
     return tensorboard_path
 
 def reconstruction_loss(_model):
@@ -130,6 +128,7 @@ def sparsecode_loss(_model):
 class Saver():
     """Help handle save/restore logic"""
     def __init__(self, **kwargs):
+        print(kwargs)
         self._save = kwargs.get('save_model', False)
         self._load = kwargs.get('load_model', False)
         self._name = kwargs['name']
@@ -168,7 +167,7 @@ class Saver():
        
 def train(_model, _datahandler):
 
-    tensorboard_path = config_train_tb(_model.encoder, _model.decoder)
+    tensorboard_path = config_train_tb(_model)
 
     dist_loss, msssim_loss = reconstruction_loss(_model)
     _reconstructoin_loss =\
@@ -206,6 +205,9 @@ def train(_model, _datahandler):
         tf.global_variables_initializer().run(session=sess)
         print('Initialized')
 
+        np.savez('dbugfile_untied', Wd=sess.run(_model.encoder._Wd),
+                We=sess.run(_model.encoder._We))
+
         merged_only_tr = tf.summary.merge_all(key=tf.GraphKeys.SUMMARIES)
         merged = tf.summary.merge_all(key='TB_LOSS')
         train_summ_writer = tf.summary.FileWriter(tensorboard_path + args.name)
@@ -224,6 +226,7 @@ def train(_model, _datahandler):
         if args.debug:
             sess = tf_debug.LocalCLIDebugWrapperSession(sess)
             sess.add_tensor_filter("has_inf_or_nan", tf_debug.has_inf_or_nan)
+
         print('number of epochs %d'%args.num_epochs)
         for epoch in range(1, args.num_epochs + 1):
             epoch_loss = 0
@@ -276,6 +279,8 @@ def train(_model, _datahandler):
                             print('saving model at: %s'%saver_mngr._name) 
                     if len(validation_loss)  > 5:
                         if (valid_loss > validation_loss[-5:]).all():
+                            print('valid loss {} \n all validation loss {}'.format(valid_loss, validation_loss))
+                            exit()
                             learning_rate_var *= 0.9
                             saver_mngr.restore(sess)
                             print('decreasing learning_rate to\
@@ -301,17 +306,36 @@ def train(_model, _datahandler):
     plt.savefig(DIR_PATH + 'logdir/plots/filters.png')
     print('seved plot of dict filter atoms in {}'.format(DIR_PATH + 'logdir/plots/filters.png'))
 
+def param_count():
+    total_parameters = 0
+    for variable in tf.trainable_variables():
+        # shape is an array of tf.Dimension
+        shape = variable.get_shape()
+        print(shape)
+        print(len(shape))
+        variable_parameters = 1
+        for dim in shape:
+            print(dim)
+            variable_parameters *= dim.value
+        print(variable_parameters)
+        total_parameters += variable_parameters
+    return total_parameters
+
+
 def main():
     dh = data_handler.DataHandlerBase.factory(norm_val=255, **HYPR_PARAMS)
-    model  = ApproxCSC()
+    model  = ApproxCSC(type=HYPR_PARAMS['model_type'])
     model.build_model(
+        amount_stacked=HYPR_PARAMS['amount_stacked'],
         unroll_count=HYPR_PARAMS['unroll_count'],
         L=1, batch_size=HYPR_PARAMS['batch_size'],
         kernel_size=HYPR_PARAMS['kernel_size'],
         shrinkge_type=HYPR_PARAMS['shrinkge_type'],
         kernel_count=HYPR_PARAMS['kernel_count'],
-        channel_size=dh.shape[-1]
+        channel_size=dh.shape[-1],
+        norm_kernal=HYPR_PARAMS['norm_kernal']
     )
+    print('Amount of params: {}'.format(param_count()))
     train(_datahandler=dh, _model=model)
 
 if __name__ == '__main__':
@@ -342,7 +366,7 @@ if __name__ == '__main__':
     parser.add_argument('--sparse_sim_factor',  default=0, type=float)
     parser.add_argument('--recon_factor', '-rf',  default=1.0, type=float)
     parser.add_argument('--ms_ssim', '-ms',  default=0.0, type=float)
-    parser.add_argument('--dup_count', '-dc',  default=2, type=int)
+    parser.add_argument('--dup_count', '-dc',  default=1, type=int)
     parser.add_argument('--load_pretrained_dict', action='store_true', help='inilize dict with pre traindict in "./pretrained_dict" dir')
     parser.add_argument('--dont_train_dict', action='store_true',  help='how many epochs to wait train dict 0 means dont train')
     parser.add_argument('--task',  default='multi_denoise', choices=['denoise', 'inpaint', 'multi_denoise'], 
@@ -351,8 +375,13 @@ if __name__ == '__main__':
     parser.add_argument('--inpaint_keep_prob', '-p', type=float, default=0.5,
             help='probilty to sample pixel')
     parser.add_argument('--noise_sigma', '-ns', type=float, default=20,
-            help='probilty to sample pixel')
+            help='noise magnitude')
     parser.add_argument('--disttyp', '-dt', default='l2', type=str, choices=['l2', 'l1', 'smoothl1'])
+    parser.add_argument('--model_type', '-mt', default='convdict', choices=['convdict', 'convmultidict', 'untied'])
+    parser.add_argument('--norm_kernal',  action='store_true', help='keep kernals with unit kernels')
+    parser.add_argument('--amount_stacked',  default=2, type=int,
+    help='Amount of LISTA AE to stack')
+
     args = parser.parse_args()
 
     global HYPR_PARAMS

@@ -24,8 +24,9 @@ class DecConvDict2dBase(object):
     def _init_cd(self, init_val):
         self._cd = tf.Variable(init_val, name='decoder') 
         self._cd = tf.nn.l2_normalize(self._cd, dim=[0, 1], name='normilized_dict') # keep decoder atoms with l2 norm of 1
-        if self.norm_kernal:
-            self._cd = tf.nn.l2_normalize(self._cd, dim=[0, 1], name='normilized_dict') # keep decoder atoms with l2 norm of 1
+## CURRENTLY ALLWAYS NORM KERS
+#        if self.norm_kernal:
+#            self._cd = tf.nn.l2_normalize(self._cd, dim=[0, 1], name='normilized_dict') # keep decoder atoms with l2 norm of 1
 
     @abstractmethod
     def reconstruct(self, _sc):

@@ -148,6 +148,7 @@ def main(args):
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
     model  = ApproxCSC(type=args.model_type)
     model.build_model(
+        amount_stacked=args.amount_stacked,
         unroll_count=args.unroll_count,
         L=1, batch_size=1,
         kernel_size=args.kernel_size,
@@ -200,8 +201,9 @@ if __name__ == '__main__':
             help='noise magnitude')
     parser.add_argument('--model_type', '-mt', default='untied', choices=['convdict', 'convmultidict', 'untied'])
     parser.add_argument('--norm_kernal', '-nk', action='store_true',
-        help='keep kernels with unit norm')
+        help='keep kernels with unit norm') 
     parser.add_argument('--test_path', '-tp',
             default='/data/hillel/data_sets/test_images/')
+    parser.add_argument('--amount_stacked', '-as', default=1, type=int)
     args = parser.parse_args()
     main(args)

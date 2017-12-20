@@ -22,8 +22,8 @@ class AutoEncoderBase(object):
         pass
 
     def __init__(self):
-        self._encoder = None
-        self._decoder = None
+        self._encoder = []
+        self._decoder = []
 
     @property
     @abstractmethod
@@ -64,7 +64,7 @@ class ApproxCSC(AutoEncoderBase):
 
     @property
     def output(self):
-        return self.raise_on_none(self.decoder.output, 'output')
+        return self.raise_on_none(self._outputs, 'output')
 
     @property
     def sparsecode(self):
@@ -72,15 +72,15 @@ class ApproxCSC(AutoEncoderBase):
 
     @property
     def input(self):
-        return self.raise_on_none(self.encoder.input, 'intput')
+        return self.raise_on_none(self.inputs, 'intput')
 
     @property
     def encoder(self):
-        return self.raise_on_none(self._encoder, 'LISTAencoder')
+        return self.raise_on_none(self._encoder[-1], 'LISTAencoder')
     
     @property
     def decoder(self):
-        return self.raise_on_none(self._decoder, 'CSCdecoder')
+        return self.raise_on_none(self._decoder[-1], 'CSCdecoder')
 
     # CREATING MODEL
     def _get_encoder(self, **encargs):
@@ -114,18 +114,32 @@ class ApproxCSC(AutoEncoderBase):
             )
         return decoder
 
-    def build_model(self, **encargs):
+
+
+    def _add_ae_block(self, inputs, encargs):
+        self._encoder.append(self._get_encoder(**encargs))
+        if inputs is None:
+            self.inputs = self._encoder[-1].creat_input_placeholder()
+            inputs = self.inputs
+        self._encoder[-1].build_model(inputs)
+        _decargs = {
+            'init_val':self._encoder[-1].Wd, # TODO: Fix this.initialized_value(),
+            'output_size':self._encoder[-1].inputshape,
+            'norm_kernal': self._encoder[-1]._norm_kers
+        }
+        self._decoder.append(self._get_decoder(**_decargs))
+        self._decoder[-1].build_model(_sc=self._encoder[-1].output)
+        return self._decoder[-1].output
+
+
+    def build_model(self, amount_stacked=1, **encargs):
         """
         encoder-args can be user choice.
         decoder-args is defined from encoder-args.
         """
-        self._encoder = self._get_encoder(**encargs)
-        self._encoder.build_model()
-
-        _decargs = {
-            'init_val':self._encoder.Wd, # TODO: Fix this.initialized_value(),
-            'output_size':self._encoder.inputshape,
-            'norm_kernal': self._encoder._norm_kers
-        }
-        self._decoder = self._get_decoder(**_decargs)
-        self._decoder.build_model(_sc=self._encoder.output)
+        inputs = None
+        inputs  = self._add_ae_block(inputs, encargs)
+        for _ in range(1, amount_stacked):
+            inputs = tf.clip_by_value(inputs, 0, 1)
+            inputs  = self._add_ae_block(inputs, encargs)
+        self._outputs = tf.clip_by_value(inputs, 0, 1)
