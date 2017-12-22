@@ -76,7 +76,12 @@ def config_train_tb(_model, add_stats=False):
             variable_summaries(_model._encoder[-1].output)
         tf.summary.scalar('encoded_sparsity',
              tf.reduce_mean(tf.count_nonzero(_model._encoder.output, axis=[1,2,3])))
-    tf.summary.image('input', _model.input)
+
+    if _model.type == 'dynamicthrsh':
+        tf.summary.image('input', _model.encoder.inputs_noisy)
+    else:
+        tf.summary.image('input', _model.input)
+
     tf.summary.image('output', _model.output)
     tf.summary.image('target', _model.target)
     return tensorboard_path
@@ -375,11 +380,11 @@ if __name__ == '__main__':
     parser.add_argument('--noise_sigma', '-ns', type=float, default=20,
             help='noise magnitude')
     parser.add_argument('--disttyp', '-dt', default='l2', type=str, choices=['l2', 'l1', 'smoothl1'])
-    parser.add_argument('--model_type', '-mt', default='convdict', choices=['convdict', 'convmultidict', 'untied', 'dynamicthrsh'])
+    parser.add_argument('--model_type', '-mt', default='dynamicthrsh', choices=['convdict', 'convmultidict', 'untied', 'dynamicthrsh'])
     parser.add_argument('--norm_kernal',  action='store_true', help='keep kernals with unit kernels')
     parser.add_argument('--amount_stacked',  default=2, type=int,
     help='Amount of LISTA AE to stack')
-
+#TODO: add args for dynamic thresholding
     args = parser.parse_args()
 
     global HYPR_PARAMS

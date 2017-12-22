@@ -17,9 +17,9 @@ class LISTAConvDict2dDynamicThrsh(lista_convdict2d.LISTAConvDict2d):
     """
     def __init__(
             self,
-            thrsh_scale_factor,
-            sigmas,
-            sigma_scale_factor,
+            thrsh_scale_factor=255,
+            sigmas=[5,10,15,20,25,30],
+            sigma_scale_factor=20.0,
             **kwargs
             ):
 
@@ -32,6 +32,7 @@ class LISTAConvDict2dDynamicThrsh(lista_convdict2d.LISTAConvDict2d):
         self.sigma_scale_factor = sigma_scale_factor
         self.is_train = tf.placeholder_with_default(False, shap=(,), name='is_train')
         self.scale_thrsh = 0
+        self._inputs_noisy = None
 
     def gaussian_noise_layer(self, input_layer, std):
         noise = tf.random_normal(shape=tf.shape(input_layer), mean=0.0, stddev=std, dtype=tf.float32) 
@@ -47,11 +48,14 @@ class LISTAConvDict2dDynamicThrsh(lista_convdict2d.LISTAConvDict2d):
             [[1./len(sigmas)]*len(sigmas]),
             tf.int32
             )
-        inputs_noisy = self.gaussian_noise_layer(inputs, float(smpl_sigma)/self.sigma_scale_factor)
+        self._inputs_noisy = self.gaussian_noise_layer(inputs, float(smpl_sigma)/self.sigma_scale_factor)
         scale_thrsh = float(smpl_sigma) / self.thrsh_scale_factor
 
-        super(LISTAConvDict2dDynamicThrsh, self).build_model(inputs_noisy)
+        super(LISTAConvDict2dDynamicThrsh, self).build_model(self._inputs_noisy)
 
+    @property
+    def inputs_noisy(self):
+        return self._inputs_noisy
 
     @property
     def theta(self):

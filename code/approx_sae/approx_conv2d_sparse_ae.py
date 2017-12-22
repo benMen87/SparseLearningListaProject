@@ -83,6 +83,10 @@ class ApproxCSC(AutoEncoderBase):
     def decoder(self):
         return self.raise_on_none(self._decoder[-1], 'CSCdecoder')
 
+    @property
+    def type(self):
+        return self._type
+
     # CREATING MODEL
     def _get_encoder(self, **encargs):
         if self._type == 'convdict':

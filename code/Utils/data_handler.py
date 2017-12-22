@@ -44,6 +44,7 @@ class DataHandlerBase(DataLoader):
             DS_ARGS['inpaint_keep_prob'] = kwargs['inpaint_keep_prob']
             return DataHandlerInpaint(**DS_ARGS)
         elif kwargs['task'] == 'denoise_dynamicthrsh':
+            return DataHandler(*DS_ARGS)
             
         else:
             raise BadDsNameOrPath()
