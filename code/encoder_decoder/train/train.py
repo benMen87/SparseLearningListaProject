@@ -231,10 +231,9 @@ def train(_model, _datahandler):
         for epoch in range(1, args.num_epochs + 1):
             epoch_loss = 0
             print('epoch number:%d', epoch)
-            b_num = 0
 
             for X_batch, Y_batch in train_dh:
-                b_num += 1
+               
                 iter_loss = 0
                 feed_dict = {_model.input: X_batch, _model.target: Y_batch}
                 if HYPR_PARAMS['task'] == 'inpaint':
@@ -243,12 +242,12 @@ def train(_model, _datahandler):
                 _, iter_loss = sess.run([optimizer, loss], feed_dict)
                 epoch_loss += iter_loss
 
-                if b_num % 30 == 0:
+                if train_dh.batch_num % 30 == 0:
                     summary = sess.run([merged, merged_only_tr], feed_dict)
                     for s in summary:
                         train_summ_writer.add_summary(s, global_step=global_step.eval(session=sess))
 
-                if b_num % 30 == 0:
+                if train_dh.batch_num == 0:
                     valid_loss = 0
                     v_itr = 0
                     sp_out_itr = 0
@@ -321,10 +320,9 @@ def param_count():
         total_parameters += variable_parameters
     return total_parameters
 
-
 def main():
     dh = data_handler.DataHandlerBase.factory(norm_val=255, **HYPR_PARAMS)
-    model  = ApproxCSC(type=HYPR_PARAMS['model_type'])
+    model = ApproxCSC(type=HYPR_PARAMS['model_type'])
     model.build_model(
         amount_stacked=HYPR_PARAMS['amount_stacked'],
         unroll_count=HYPR_PARAMS['unroll_count'],
@@ -369,7 +367,7 @@ if __name__ == '__main__':
     parser.add_argument('--dup_count', '-dc',  default=1, type=int)
     parser.add_argument('--load_pretrained_dict', action='store_true', help='inilize dict with pre traindict in "./pretrained_dict" dir')
     parser.add_argument('--dont_train_dict', action='store_true',  help='how many epochs to wait train dict 0 means dont train')
-    parser.add_argument('--task',  default='multi_denoise', choices=['denoise', 'inpaint', 'multi_denoise'], 
+    parser.add_argument('--task',  default='denoise_dynamicthrsh', choices=['denoise', 'denoise_dynamicthrsh', 'inpaint', 'multi_noise'], 
             help='add noise to input')
     parser.add_argument('--grayscale',  action='store_true', help='converte RGB images to grayscale')
     parser.add_argument('--inpaint_keep_prob', '-p', type=float, default=0.5,
@@ -377,7 +375,7 @@ if __name__ == '__main__':
     parser.add_argument('--noise_sigma', '-ns', type=float, default=20,
             help='noise magnitude')
     parser.add_argument('--disttyp', '-dt', default='l2', type=str, choices=['l2', 'l1', 'smoothl1'])
-    parser.add_argument('--model_type', '-mt', default='convdict', choices=['convdict', 'convmultidict', 'untied'])
+    parser.add_argument('--model_type', '-mt', default='convdict', choices=['convdict', 'convmultidict', 'untied', 'dynamicthrsh'])
     parser.add_argument('--norm_kernal',  action='store_true', help='keep kernals with unit kernels')
     parser.add_argument('--amount_stacked',  default=2, type=int,
     help='Amount of LISTA AE to stack')

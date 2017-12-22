@@ -43,6 +43,8 @@ class DataHandlerBase(DataLoader):
         elif kwargs['task'] == 'inpaint':
             DS_ARGS['inpaint_keep_prob'] = kwargs['inpaint_keep_prob']
             return DataHandlerInpaint(**DS_ARGS)
+        elif kwargs['task'] == 'denoise_dynamicthrsh':
+            
         else:
             raise BadDsNameOrPath()
 
@@ -89,16 +91,17 @@ class DataHandlerBase(DataLoader):
 
     class Batch():
         def __init__(self, batch_size, data, target=None, run_once=False, use_mask=False):
-            self.batch_size = batch_size
-            self.batch_num = 0
+            self._batch_size = batch_size
+            self._batch_num = 0
             self.epoch = 0
-            self.data = data
-            self.target = target
+            self._data = data
+            self._target = if target not None target else data
             self._use_mask = use_mask
             self.curr_batch = (None, None)
-            self.data_len = len(data)
-            self.batchs_per_epoch = np.ceil(float(self.data_len) / self.batch_size) 
-            self.run_once = run_once
+            self._data_len = len(data)
+            self._batchs_per_epoch = np.ceil(float(self.data_len) / self.batch_size) 
+            self._run_once = run_once
+            self._epoch_hook = 
 
         def __iter__(self):
             return self
@@ -107,35 +110,63 @@ class DataHandlerBase(DataLoader):
 
             if self.data_len == 0:
                 raise  DataNotLoadedException('No data')
-            s, e = self.start_end()
-            if self.batch_num < self.batchs_per_epoch:
-                self.curr_batch = (self.data[s:e], self.target[s:e])
+            s, e = self._start_end()
+            if self._batch_num < self._batchs_per_epoch:
+                self._curr_batch = (self._data[s:e], self._target[s:e])
             else:
-                self.rewind()
-                if self.run_once:
+                self._rewind()
+                if self._run_once:
                     raise StopIteration()
                 else:
-                    self.curr_batch = (self.data[s:e], self.target[s:e])
-            self.batch_num += 1
-            return self.curr_batch   
+                    self._curr_batch = (self._data[s:e], self._target[s:e])
+            self._batch_num += 1
+            return self._curr_batch   
         
-        def rewind(self):
-            self.epoch += 1
-            self.batch_num = 0
+        def _rewind(self):
+            self._epoch += 1
+            self._batch_num = 0
         
         def mask(self):
             if self._use_mask:
-                return (self.curr_batch[0] == self.curr_batch[1]).astype(float)
+                return (self._curr_batch[0] == self._curr_batch[1]).astype(float)
             else:
                 return 1
 
-        def start_end(self):
-            start = self.batch_size * self.batch_num
-            end = np.minimum(self.batch_size + start, self.data_len)
-            if not start < end and not self.run_once:
-                self.rewind()
-                return self.start_end()
+        def _start_end(self):
+            start = self._batch_size * self._batch_num
+            end = np.minimum(self._batch_size + start, self._data_len)
+            if not start < end and not self._run_once:
+                self._rewind()
+                return self._start_end()
             return start, end
+
+        @property
+        def batch_num(self):
+            return self._batch_num
+
+class DataHandler(DataHandlerBase):
+   """
+    Data handler for train session with noise.
+    """
+    def __init__(self, valid_ratio, ds_name, norm_val=255):
+        super(DataHandlerNoise, self).__init__(valid_ratio)
+        self.load_data(name=ds_name, norm_val=norm_val)
+
+    def preprocess_data(self, **kwargs):
+        pass
+
+    def xy_gen(self, data_in, batch_size, run_once):
+        batch = self.Batch(batch_size, data_in, [None]*len(data_in), run_once)
+        return batch
+
+    def train_gen(self, batch_size, run_once=False):
+        return self.xy_gen(self.train, batch_size, run_once)
+
+    def valid_gen(self, batch_size, run_once=True):
+        return self.xy_gen(self.valid, batch_size, run_once)
+
+    def test_gen(self, batch_size, run_once=True):
+        return self.xy_gen(self.test, batch_size, run_once)
 
 class DataHandlerNoise(DataHandlerBase):
     """
@@ -167,7 +198,7 @@ class DataHandlerNoise(DataHandlerBase):
     def test_gen(self, batch_size, run_once=True):
         return self.xy_gen(self.test, batch_size, run_once)
 
-class DataHandlerMultipleNoise(DataHandlerBase):
+class DataHandlerNoiseDup(DataHandlerBase):
     """
     Data handler for train session with noise.
     """
@@ -217,7 +248,7 @@ class DataHandlerInpaint(DataHandlerBase):
     def xy_gen(self, target, batch_size, run_once):
         """Add noise to target im yeild batches"""
         data_in, mask = self.preprocess_data(data=target)
-        batch = self.Batch(batch_size, data_in, target, run_once)
+        batch = self.Batch(batch_size, data_in, target, run_once, use_mask=True)
         return batch
 
     def train_gen(self, batch_size, run_once=False):

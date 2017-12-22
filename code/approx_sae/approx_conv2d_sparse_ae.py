@@ -13,6 +13,7 @@ from abc import ABCMeta, abstractmethod
 from approx_sparse_conv_enc import lista_convdict2d
 from approx_sparse_conv_enc import lista_multiconvdict2d
 from approx_sparse_conv_enc import lista_convdict2d_untied
+from approx_sparse_conv_enc import lista_convdict_dynamicthrsh
 from approx_sparse_conv_dec import dec_convdict2d
 
 class AutoEncoderBase(object):
@@ -47,7 +48,7 @@ class AutoEncoderBase(object):
             return _val
 
 class ApproxCSC(AutoEncoderBase):
-    LEGALE_TPYES = ['convdict', 'convmultidict', 'untied']
+    LEGALE_TPYES = ['convdict', 'convmultidict', 'untied', 'dynamicthrsh']
 
     def __init__(self, type='convdict', **kwargs):
         super(ApproxCSC, self).__init__()
@@ -90,6 +91,8 @@ class ApproxCSC(AutoEncoderBase):
             encoder_fn = lista_multiconvdict2d.LISTAConvMultiDict2d
         elif self._type == 'untied':
             encoder_fn = lista_convdict2d_untied.LISTAConvDict2dUntied
+        elif self._type == 'dynamicthrsh':
+            encoder_fn = lista_convdict_dynamicthrsh.LISTAConvDict2dDynamicThrsh
         else:
             # shouldn't reach here
             raise SystemError("Shouldn't reach here")
@@ -98,7 +101,7 @@ class ApproxCSC(AutoEncoderBase):
         return encoder
 
     def _get_decoder(self, **decargs):
-        if self._type == 'convdict' or self._type == 'untied': 
+        if self._type == 'convdict' or self._type == 'untied' or  self._type == 'dynamicthrsh':
             decoder_fn = dec_convdict2d.DecConvDict2d
         elif self._type == 'convmultidict':
             decoder_fn = dec_convdict2d.DecConvMultiDict2d
