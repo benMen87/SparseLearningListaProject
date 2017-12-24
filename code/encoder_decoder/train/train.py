@@ -16,181 +16,41 @@ sys.path.append(os.path.abspath(DIR_PATH) + '/../')
 from approx_sae.approx_conv2d_sparse_ae import ApproxCSC
 from approx_sae import approx_sae_losses
 from Utils import data_handler
-from Utils import ms_ssim
+from Utils import tf_train_utils
 from evaluate import evaluate
 
+
+
+os.environ['CUDA_VISIBLE_DEVICES']=' '
 #######################################################
-#   Training Vars - optimizers and batch generators
+#   Training Procedure 
 #######################################################
-def lerning_rate_timedecay(learning_rate, decay_rate, global_step, decay_steps):
-    learning_rate = tf.train.inverse_time_decay(
-            learning_rate=args.learning_rate,
-            global_step=global_step,
-            decay_steps=decay_steps,
-            decay_rate=decay_rate,
-            staircase=True
-            )
-    return learning_rate
-
-def clip_grad(optimizer, loss,  val, tr_vars, global_step):
-    gvs = optimizer.compute_gradients(loss, tr_vars)
-    capped_gvs = [(tf.clip_by_value(grad, -val, val), var) for grad, var in gvs]
-    optimizer = optimizer.apply_gradients(capped_gvs, global_step=global_step)
-    return optimizer
-
-def get_opt(lr=0.001, momentum=0.9):
-    opt_name =HYPR_PARAMS.get('optimizer', 'adam')
-    if  opt_name == 'adam':
-        return tf.train.AdamOptimizer(lr)
-    elif opt_name == 'momentum':
-        return  tf.train.MomentumOptimizer(lr, momentum, use_nesterov=True)
-
-
-def variable_summaries(var):
-    """Attach a lot of summaries to a Tensor (for TensorBoard visualization)."""
-    with tf.name_scope('summaries'):
-        mean = tf.reduce_mean(var)
-        tf.summary.scalar('mean', mean)
-    with tf.name_scope('stddev'):
-        stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
-    tf.summary.scalar('stddev', stddev)
-    tf.summary.scalar('max', tf.reduce_max(var))
-    tf.summary.scalar('min', tf.reduce_min(var))
-    tf.summary.histogram('histogram', var)
-
-def config_train_tb(_model, add_stats=False):
-    tensorboard_path = '/data/hillel/tb/' + HYPR_PARAMS['name'] + '/'
-    if not os.path.isdir(tensorboard_path):
-        os.mkdir(tensorboard_path)
-    if add_stats:
-        with tf.name_scope('encoder'):
-            with tf.name_scope('We'):
-                variable_summaries(_model._encoder[-1]._We)
-            with tf.name_scope('Wd'):
-                variable_summaries(_model._encoder[-1]._Wd)
-            with tf.name_scope('threshold'):
-                variable_summaries(_model._encoder[-1]._theta)
-        with tf.name_scope('decoder'):
-            variable_summaries(_model._decoder[-1].convdict)
-        with tf.name_scope('sparse_code'):
-            variable_summaries(_model._encoder[-1].output)
-        tf.summary.scalar('encoded_sparsity',
-             tf.reduce_mean(tf.count_nonzero(_model._encoder.output, axis=[1,2,3])))
-
-    if _model.type == 'dynamicthrsh':
-        tf.summary.image('input', _model.encoder.inputs_noisy)
-    else:
-        tf.summary.image('input', _model.input)
-
-    tf.summary.image('output', _model.output)
-    tf.summary.image('target', _model.target)
-    return tensorboard_path
-
-def reconstruction_loss(_model):
-    dist_loss = 0
-    _ms_ssim = 0
-
-    out = _model.decoder.output
-    target = _model.decoder.target
-    boundry = (_model.encoder.kernel_size // 2,_model.encoder.kernel_size // 2)
-
-    if HYPR_PARAMS['disttyp'] == 'l1':
-        dist_loss = approx_sae_losses.l1(_out=out, _target=target, _boundry=boundry)
-        tf.summary.scalar('dist_l1', dist_loss, collections=['TB_LOSS'])
-    elif HYPR_PARAMS['disttyp'] == 'smooth_l1':
-        dist_loss = approx_sae_losses.smooth_l1(_out=_out, _target=_target, _boundry=boundry)
-        tf.summary.scalar('dist_smoothl1', dist_loss, collections=['TB_LOSS'])
-    elif HYPR_PARAMS['disttyp'] == 'l2':
-        dist_loss = approx_sae_losses.l2(_out=out, _target=target, _boundry=boundry)
-        tf.summary.scalar('dist_l2', dist_loss, collections=['TB_LOSS'])
-
-    if HYPR_PARAMS['ms_ssim']:
-        half_ker = _model.encoder.kernel_size // 2
-        _ms_ssim = ms_ssim.tf_ms_ssim(
-            target[:,half_ker:-half_ker,half_ker:-half_ker,...],
-            out[:,half_ker:-half_ker,half_ker:-half_ker,...],
-            level=4
-        )
-        tf.summary.scalar('ms_ssim', _ms_ssim, collections=['TB_LOSS'])
-    return dist_loss, (1 - _ms_ssim)
-
-def sparsecode_loss(_model):
-    sparse_loss = 0
-    similarity_loss = 0
-
-    if HYPR_PARAMS['sparse_factor']:
-        sparse_loss = tf.reduce_mean(tf.abs(_model.sparsecode))
-        tf.summary.scalar('l1_sparse', sparse_loss, collections=['TB_LOSS'])
-    if HYPR_PARAMS['sparse_sim_factor']:
-        similarity_loss = approx_sae_losses.sc_similarity(
-            _x=_model.sparsecode,
-            _chunk_size=HYPR_PARAMS['dup_count'],
-            _chunk_count=HYPR_PARAMS['batch_size']
-        )
-        tf.summary.scalar('sc_sim', similarity_loss, collections=['TB_LOSS'])
-    return sparse_loss, similarity_loss
-    
-class Saver():
-    """Help handle save/restore logic"""
-    def __init__(self, **kwargs):
-        print(kwargs)
-        self._save = kwargs.get('save_model', False)
-        self._load = kwargs.get('load_model', False)
-        self._name = kwargs['name']
-        self._path = DIR_PATH + '/logdir/models/' + self._name + '/'
-        self._saver = None
-
-    def  __call__(self): 
-        if self._save or self._load:
-            self._saver = tf.train.Saver(max_to_keep=1)
-            if not os.path.isdir(self._path):
-                os.mkdir(self._path)
-
-    def maybe_load(self, load_name, sess):
-        if self._load:
-            if load_name != '':
-                LOAD_DIR = DIR_PATH + '/logdir/models/' + load_name + '/'
-            else:
-                LOAD_DIR = self._path
-            if os.listdir(LOAD_DIR):
-                print('loading model')
-                self._saver.restore(sess, tf.train.latest_checkpoint(LOAD_DIR))
-                return True
-            else:
-                print('no cpk to load running with random init')
-                return False
-
-    def save(self, sess, global_step):
-        self._saver.save(sess, self._path, global_step=global_step)
-
-    def restore(self, sess):
-        self._saver.restore(sess, tf.train.latest_checkpoint(self._path))
-
-    @property
-    def saver(self):
-        return self._saver
-       
 def train(_model, _datahandler):
 
-    tensorboard_path = config_train_tb(_model)
-
-    dist_loss, msssim_loss = reconstruction_loss(_model)
+    dist_loss, msssim_loss = \
+        approx_sae_losses.reconstruction_loss(_model, HYPR_PARAMS['disttyp'], HYPR_PARAMS['ms_ssim'])# reconstruction_loss(_model)
     _reconstructoin_loss =\
         HYPR_PARAMS['recon_factor'] * dist_loss  + \
         HYPR_PARAMS['ms_ssim'] * msssim_loss
+    loss = _reconstructoin_loss 
 
-    sparse_loss, similarity_loss = sparsecode_loss(_model)
-    _sparsecode_loss = \
-        HYPR_PARAMS['sparse_factor'] * sparse_loss + \
-        HYPR_PARAMS['sparse_sim_factor'] * similarity_loss
+    if HYPR_PARAMS['sparse_factor']:
+        sparse_loss, _ = approx_sae_losses.sparsecode_loss(_model)
+        _sparsecode_loss = \
+            HYPR_PARAMS['sparse_factor'] * sparse_loss
+            # + HYPR_PARAMS['sparse_sim_factor'] * similarity_loss
+        loss += _sparsecode_loss
 
-    loss = _reconstructoin_loss + _sparsecode_loss
-    saver_mngr = Saver(dir_path=DIR_PATH, **HYPR_PARAMS)
+
+    tensorboard_path = tf_train_utils.config_train_tb(_model, HYPR_PARAMS['name'], loss=loss)
+
+    saver_mngr = tf_train_utils.Saver(dir_path=DIR_PATH, **HYPR_PARAMS)
     saver_mngr()
 
+    opt_name = HYPR_PARAMS.get('optimizer', 'adam')
     global_step = tf.Variable(0, dtype=tf.int32, trainable=False, name='global_step')
     learning_rate_var = tf.Variable(args.learning_rate)
-    optimizer = get_opt(learning_rate_var).minimize(loss, global_step=global_step)
+    optimizer = tf_train_utils.get_optimizer(opt_name, learning_rate_var).minimize(loss, global_step=global_step)
 
     batch_size = HYPR_PARAMS['batch_size']
     if HYPR_PARAMS['task'] == 'multi_denoise':
@@ -199,14 +59,15 @@ def train(_model, _datahandler):
     train_dh = _datahandler.train_gen(batch_size)
     valid_dh = _datahandler.valid_gen(batch_size)
     test_dh = _datahandler.test_gen(10)
-
+    print('VALID BATCHED {}'.format(valid_dh._batchs_per_epoch))
     ###################################################################
     #                Training   +   Results
     ###################################################################
     validation_loss = []
     valid_sparsity_out = []
+
     with tf.Session() as sess:
-        
+
         tf.global_variables_initializer().run(session=sess)
         print('Initialized')
 
@@ -217,8 +78,7 @@ def train(_model, _datahandler):
         merged = tf.summary.merge_all(key='TB_LOSS')
         train_summ_writer = tf.summary.FileWriter(tensorboard_path + args.name)
         train_summ_writer.add_graph(sess.graph)
-        valid_summ_writer = tf.summary.FileWriter(tensorboard_path + args.name +
-                '_valid')
+        valid_summ_writer = tf.summary.FileWriter(tensorboard_path + args.name + '_valid')
 
         saver_mngr.maybe_load(HYPR_PARAMS['load_name'], sess)
 
@@ -235,10 +95,10 @@ def train(_model, _datahandler):
         print('number of epochs %d'%args.num_epochs)
         for epoch in range(1, args.num_epochs + 1):
             epoch_loss = 0
-            print('epoch number:%d', epoch)
+            print('epoch number:%d'%epoch)
 
             for X_batch, Y_batch in train_dh:
-               
+
                 iter_loss = 0
                 feed_dict = {_model.input: X_batch, _model.target: Y_batch}
                 if HYPR_PARAMS['task'] == 'inpaint':
@@ -252,7 +112,7 @@ def train(_model, _datahandler):
                     for s in summary:
                         train_summ_writer.add_summary(s, global_step=global_step.eval(session=sess))
 
-                if train_dh.batch_num == 0:
+                if train_dh.batch_num % 50  == 0:
                     valid_loss = 0
                     v_itr = 0
                     sp_out_itr = 0
@@ -276,7 +136,6 @@ def train(_model, _datahandler):
 
                     validation_loss.append(valid_loss)
                     valid_sparsity_out = sp_out_itr/v_itr
-
                     if valid_loss <= np.min(validation_loss):
                         if args.save_model:
                             saver_mngr.save(sess, global_step=global_step)
@@ -284,8 +143,7 @@ def train(_model, _datahandler):
                     if len(validation_loss)  > 5:
                         if (valid_loss > validation_loss[-5:]).all():
                             print('valid loss {} \n all validation loss {}'.format(valid_loss, validation_loss))
-                            exit()
-                            learning_rate_var *= 0.9
+                            tf_train_utils.change_lr_val(sess, learning_rate_var, 0.9) 
                             saver_mngr.restore(sess)
                             print('decreasing learning_rate to\
                                     {}'.format(learning_rate_var.eval()))
@@ -380,9 +238,9 @@ if __name__ == '__main__':
     parser.add_argument('--noise_sigma', '-ns', type=float, default=20,
             help='noise magnitude')
     parser.add_argument('--disttyp', '-dt', default='l2', type=str, choices=['l2', 'l1', 'smoothl1'])
-    parser.add_argument('--model_type', '-mt', default='dynamicthrsh', choices=['convdict', 'convmultidict', 'untied', 'dynamicthrsh'])
+    parser.add_argument('--model_type', '-mt', default='dynamicthrsh_untied', choices=['convdict', 'convmultidict', 'untied', 'dynamicthrsh', 'dynamicthrsh_untied'])
     parser.add_argument('--norm_kernal',  action='store_true', help='keep kernals with unit kernels')
-    parser.add_argument('--amount_stacked',  default=2, type=int,
+    parser.add_argument('--amount_stacked',  default=1, type=int,
     help='Amount of LISTA AE to stack')
 #TODO: add args for dynamic thresholding
     args = parser.parse_args()

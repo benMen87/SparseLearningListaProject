@@ -13,7 +13,7 @@ from abc import ABCMeta, abstractmethod
 from approx_sparse_conv_enc import lista_convdict2d
 from approx_sparse_conv_enc import lista_multiconvdict2d
 from approx_sparse_conv_enc import lista_convdict2d_untied
-from approx_sparse_conv_enc import lista_convdict_dynamicthrsh
+from approx_sparse_conv_enc import lista_convdict2d_dynamicthrsh
 from approx_sparse_conv_dec import dec_convdict2d
 
 class AutoEncoderBase(object):
@@ -48,7 +48,7 @@ class AutoEncoderBase(object):
             return _val
 
 class ApproxCSC(AutoEncoderBase):
-    LEGALE_TPYES = ['convdict', 'convmultidict', 'untied', 'dynamicthrsh']
+    LEGALE_TPYES = ['convdict', 'convmultidict', 'untied', 'dynamicthrsh', 'dynamicthrsh_untied']
 
     def __init__(self, type='convdict', **kwargs):
         super(ApproxCSC, self).__init__()
@@ -96,7 +96,9 @@ class ApproxCSC(AutoEncoderBase):
         elif self._type == 'untied':
             encoder_fn = lista_convdict2d_untied.LISTAConvDict2dUntied
         elif self._type == 'dynamicthrsh':
-            encoder_fn = lista_convdict_dynamicthrsh.LISTAConvDict2dDynamicThrsh
+            encoder_fn = lista_convdict2d_dynamicthrsh.LISTAConvDict2dDynamicThrsh
+        elif self._type == 'dynamicthrsh_untied':
+            encoder_fn = lista_convdict2d_dynamicthrsh.LISTAConvDict2dDynamicThrshUntied
         else:
             # shouldn't reach here
             raise SystemError("Shouldn't reach here")
@@ -105,13 +107,11 @@ class ApproxCSC(AutoEncoderBase):
         return encoder
 
     def _get_decoder(self, **decargs):
-        if self._type == 'convdict' or self._type == 'untied' or  self._type == 'dynamicthrsh':
-            decoder_fn = dec_convdict2d.DecConvDict2d
-        elif self._type == 'convmultidict':
+        if self._type == 'convmultidict':
             decoder_fn = dec_convdict2d.DecConvMultiDict2d
         else:
-            # shouldnt reach here
-            raise SystemError("Shouldn't reach here")
+            decoder_fn = dec_convdict2d.DecConvDict2d
+
         with tf.variable_scope('decoder'):
             print(decargs)
             decoder = decoder_fn(
@@ -120,8 +120,6 @@ class ApproxCSC(AutoEncoderBase):
                norm_kernal=decargs['norm_kernal']
             )
         return decoder
-
-
 
     def _add_ae_block(self, inputs, encargs):
         self._encoder.append(self._get_encoder(**encargs))

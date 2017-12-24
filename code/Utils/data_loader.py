@@ -105,5 +105,5 @@ class DataLoader(Pascal, Stl10, LoadDataFiles):
                 train = LoadDataFiles.load(ds_name_or_path[0])
                 test = LoadDataFiles.load(ds_name_or_path[1])
         if train is None and test is None:
-            raise BadDsNameOrPath('Bas name or path {}'.format(ds_name_or_path))
+            raise self.BadDsNameOrPath('Bas name or path {}'.format(ds_name_or_path))
         return train.astype('float32'), test.astype('float32')

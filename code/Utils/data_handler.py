@@ -44,7 +44,7 @@ class DataHandlerBase(DataLoader):
             DS_ARGS['inpaint_keep_prob'] = kwargs['inpaint_keep_prob']
             return DataHandlerInpaint(**DS_ARGS)
         elif kwargs['task'] == 'denoise_dynamicthrsh':
-            return DataHandler(*DS_ARGS)
+            return DataHandler(**DS_ARGS)
             
         else:
             raise BadDsNameOrPath()
@@ -94,22 +94,21 @@ class DataHandlerBase(DataLoader):
         def __init__(self, batch_size, data, target=None, run_once=False, use_mask=False):
             self._batch_size = batch_size
             self._batch_num = 0
-            self.epoch = 0
+            self._epoch = 0
             self._data = data
-            self._target = if target not None target else data
+            self._target = target if target is not None else data
             self._use_mask = use_mask
             self.curr_batch = (None, None)
             self._data_len = len(data)
-            self._batchs_per_epoch = np.ceil(float(self.data_len) / self.batch_size) 
+            self._batchs_per_epoch = np.ceil(float(self._data_len) / self._batch_size) 
             self._run_once = run_once
-            self._epoch_hook = 
 
         def __iter__(self):
             return self
 
         def next(self):
 
-            if self.data_len == 0:
+            if self._data_len == 0:
                 raise  DataNotLoadedException('No data')
             s, e = self._start_end()
             if self._batch_num < self._batchs_per_epoch:
@@ -122,11 +121,11 @@ class DataHandlerBase(DataLoader):
                     self._curr_batch = (self._data[s:e], self._target[s:e])
             self._batch_num += 1
             return self._curr_batch   
-        
+
         def _rewind(self):
             self._epoch += 1
             self._batch_num = 0
-        
+
         def mask(self):
             if self._use_mask:
                 return (self._curr_batch[0] == self._curr_batch[1]).astype(float)
@@ -146,18 +145,18 @@ class DataHandlerBase(DataLoader):
             return self._batch_num
 
 class DataHandler(DataHandlerBase):
-   """
+    """
     Data handler for train session with noise.
     """
     def __init__(self, valid_ratio, ds_name, norm_val=255):
-        super(DataHandlerNoise, self).__init__(valid_ratio)
+        super(DataHandler, self).__init__(valid_ratio)
         self.load_data(name=ds_name, norm_val=norm_val)
 
     def preprocess_data(self, **kwargs):
         pass
 
     def xy_gen(self, data_in, batch_size, run_once):
-        batch = self.Batch(batch_size, data_in, [None]*len(data_in), run_once)
+        batch = self.Batch(batch_size, data_in, data_in, run_once)
         return batch
 
     def train_gen(self, batch_size, run_once=False):
@@ -180,7 +179,7 @@ class DataHandlerNoise(DataHandlerBase):
 
     def preprocess_data(self, **kwargs):
         data = kwargs['data']
-        data_n = data + np.random.normal(0, self.sigma, data.shape)
+        data_n = data + np.random.normal(0, self.sigma, data.shape) TODO: fix this
         return data_n
 
     def xy_gen(self, target, batch_size, run_once):
