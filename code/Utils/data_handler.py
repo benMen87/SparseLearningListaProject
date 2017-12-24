@@ -179,7 +179,7 @@ class DataHandlerNoise(DataHandlerBase):
 
     def preprocess_data(self, **kwargs):
         data = kwargs['data']
-        data_n = data + np.random.normal(0, self.sigma, data.shape) TODO: fix this
+        data_n = data + np.random.normal(0, self.sigma, data.shape)
         return data_n
 
     def xy_gen(self, target, batch_size, run_once):
