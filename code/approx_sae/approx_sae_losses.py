@@ -1,5 +1,5 @@
 import tensorflow as tf
-from Utils import ms_ssim
+from Utils import ms_ssim as ms_ssim_dist
 
 def _smooth_l1(self, _x, _thrsh=1, _theta=0.5):
         """
@@ -63,7 +63,7 @@ def reconstruction_loss(_model, disttyp, ms_ssim):
 
     if ms_ssim:
         half_ker = _model.encoder.kernel_size // 2
-        _ms_ssim = ms_ssim.tf_ms_ssim(
+        _ms_ssim = ms_ssim_dist.tf_ms_ssim(
             target[:,half_ker:-half_ker,half_ker:-half_ker,...],
             out[:,half_ker:-half_ker,half_ker:-half_ker,...],
             level=4

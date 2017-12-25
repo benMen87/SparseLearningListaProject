@@ -46,7 +46,7 @@ class LISTARandNoiseDynamicThrsh(object):
         else:
             self._inputs_noisy = inputs 
             smpl_sigma = self.noise_sigma
-            
+        tf.summary.scalar('smpl_sigma', smpl_sigma)
         self._scale_thrsh = tf.to_float(smpl_sigma) / self.thrsh_scale_factor
 
     @property
@@ -62,7 +62,7 @@ class LISTAConvDict2dDynamicThrsh(lista_convdict2d.LISTAConvDict2d):
     def __init__(
             self,
             thrsh_scale_factor=20.0,
-            sigmas=[5,10,15,20,25,30],
+            sigmas=tf.range(5, 51, 5),
             sigma_scale_factor=255,
             **kwargs
             ):
@@ -98,7 +98,7 @@ class LISTAConvDict2dDynamicThrshUntied(lista_convdict2d_untied.LISTAConvDict2dU
     def __init__(
             self,
             thrsh_scale_factor=20.0,
-            sigmas=[5,10,15,20,25,30],
+            sigmas=tf.range(5, 51, 5),
             sigma_scale_factor=255,
             **kwargs
             ):

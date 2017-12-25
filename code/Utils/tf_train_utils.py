@@ -38,6 +38,8 @@ class Saver():
         self._path = kwargs['dir_path'] + '/logdir/models/' + self._name + '/'
         self._saver = None
 
+        print('#'*15+'\n'+'checkpoint dir %s\n'%self._path + '#'*15)
+        
     def  __call__(self): 
         if self._save or self._load:
             self._saver = tf.train.Saver(max_to_keep=1)

@@ -68,7 +68,9 @@ class LISTAConvDict2dUntied(lista_convdict2d_base.LISTAConvDict2dBase):
         init_We = tf.nn.l2_normalize(tf.truncated_normal([self.kernel_size, self.kernel_size,
                                       self.input_channels, self.amount_of_kernals]), dim=[0,1])
         init_Wd = tf.transpose(tf.reverse(init_We, [0,1]), [0,1,3,2])
-        for _ in range(self._unroll_count):
+        self._theta.append(tf.nn.relu(tf.Variable(tf.fill([1, self.amount_of_kernals], thrsh), name='theta')))
+        self._We.append(tf.Variable(0.1 * init_We, name='We')) 
+        for _ in range(self._unroll_count - 1):
             self._We.append(tf.Variable(0.1 * init_We, name='We'))
             self._Wd.append(tf.Variable(init_Wd, name='Wd'))
             self._theta.append(tf.nn.relu(tf.Variable(tf.fill([1, self.amount_of_kernals], thrsh), name='theta')))
@@ -76,7 +78,7 @@ class LISTAConvDict2dUntied(lista_convdict2d_base.LISTAConvDict2dBase):
 
     @property
     def Wd(self):
-        return self._Wd[self.t]
+        return self._Wd[self.t - 1]
 
     @property
     def We(self):
