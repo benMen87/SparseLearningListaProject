@@ -72,9 +72,6 @@ class LISTAConvMultiDict2d(lista_convdict2d_base.LISTAConvDict2dBase):
         if self._norm_kers:
             self._Wd_expand = tf.nn.l2_normalize(self._Wd_expand, dim=[0,1])
 
-        print('We {}'.format(self._We_expand.get_shape()))
-        print('Wd {}'.format(self._Wd_expand.get_shape()))
-
     def expand_perseptive_field(self, filter_list):
         """expand reseptive feild of filter.
 

@@ -19,11 +19,8 @@ from Utils import data_handler
 from Utils import tf_train_utils
 from evaluate import evaluate
 
-
-
-os.environ['CUDA_VISIBLE_DEVICES']=' '
 #######################################################
-#   Training Procedure 
+#   Training Procedure                                #
 #######################################################
 def train(_model, _datahandler):
 
@@ -136,6 +133,7 @@ def train(_model, _datahandler):
 
                     validation_loss.append(valid_loss)
                     valid_sparsity_out = sp_out_itr/v_itr
+
                     if valid_loss <= np.min(validation_loss):
                         if args.save_model:
                             saver_mngr.save(sess, global_step=global_step)
@@ -173,13 +171,9 @@ def param_count():
     for variable in tf.trainable_variables():
         # shape is an array of tf.Dimension
         shape = variable.get_shape()
-        print(shape)
-        print(len(shape))
         variable_parameters = 1
         for dim in shape:
-            print(dim)
             variable_parameters *= dim.value
-        print(variable_parameters)
         total_parameters += variable_parameters
     return total_parameters
 
@@ -237,7 +231,7 @@ if __name__ == '__main__':
             help='probilty to sample pixel')
     parser.add_argument('--noise_sigma', '-ns', type=float, default=20,
             help='noise magnitude')
-    parser.add_argument('--disttyp', '-dt', default='l2', type=str, choices=['l2', 'l1', 'smoothl1'])
+    parser.add_argument('--disttyp', '-dt', default='l1', type=str, choices=['l2', 'l1', 'smoothl1'])
     parser.add_argument('--model_type', '-mt', default='dynamicthrsh_untied', choices=['convdict', 'convmultidict', 'untied', 'dynamicthrsh', 'dynamicthrsh_untied'])
     parser.add_argument('--norm_kernal',  action='store_true', help='keep kernals with unit kernels')
     parser.add_argument('--amount_stacked',  default=1, type=int,

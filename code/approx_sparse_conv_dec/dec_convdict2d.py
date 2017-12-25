@@ -46,7 +46,6 @@ class DecConvMultiDict2d(DecConvDict2dBase):
             cd_list = self.expand_perseptive_field(cd_list, pad_sz)
         _cd = tf.nn.l2_normalize(tf.stack(cd_list, axis=2), dim=[0,1])
         self._cd = tf.nn.l2_normalize(_cd, dim=[0, 1], name='normilized_dict')
-        print(self._cd.get_shape().as_list())
 
     def reconstruct(self, _sc):
         res =  tf.nn.conv2d(
