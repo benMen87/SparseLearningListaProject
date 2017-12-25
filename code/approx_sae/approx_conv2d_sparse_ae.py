@@ -113,7 +113,6 @@ class ApproxCSC(AutoEncoderBase):
             decoder_fn = dec_convdict2d.DecConvDict2d
 
         with tf.variable_scope('decoder'):
-            print(decargs)
             decoder = decoder_fn(
                init_val=decargs['init_val'],
                output_shape=decargs['output_size'],

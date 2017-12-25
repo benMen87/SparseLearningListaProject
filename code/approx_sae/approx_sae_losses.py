@@ -46,12 +46,11 @@ def reconstruction_loss(_model, disttyp, ms_ssim):
     dist_loss = 0
     _ms_ssim = 0
 
-    out = _model.decoder.output
-    target = _model.decoder.target
+    out = _model.output
+    target = _model.target
     boundry = (_model.encoder.kernel_size // 2,_model.encoder.kernel_size // 2)
 
     if disttyp == 'l1':
-        print('out: {} target: {}'.format(out, target))
         dist_loss = l1(_out=out, _target=target, _boundry=boundry)
         tf.summary.scalar('dist_l1', dist_loss, collections=['TB_LOSS'])
     elif disttyp == 'smooth_l1':

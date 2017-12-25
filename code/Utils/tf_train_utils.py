@@ -111,7 +111,7 @@ def config_train_tb(_model, tb_name, loss=None, add_stats=False):
         tf.summary.scalar('encoded_sparsity',
              tf.reduce_mean(tf.count_nonzero(_model._encoder.output, axis=[1,2,3])))
 
-    if _model.type == 'dynamicthrsh':
+    if 'dynamicthrsh' in  _model.type:
         tf.summary.image('input', _model.encoder.inputs_noisy)
     else:
         tf.summary.image('input', _model.input)
