@@ -70,4 +70,8 @@ def tf_ms_ssim(img1, img2, mean_metric=True, level=5):
 
     if mean_metric:
         value = tf.reduce_mean(value)
+    #
+    # If ms_ssim is non replace with 0
+    value = tf.where(tf.is_nan(value), tf.zeros_like(value), value)
+
     return value
