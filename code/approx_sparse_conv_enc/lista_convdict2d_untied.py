@@ -20,7 +20,6 @@ class LISTAConvDict2dUntied(lista_convdict2d_base.LISTAConvDict2dBase):
             channel_size=3,
             **kwargs
             ):
-        print kwargs
         kwargs['inputshape'] = inputshape
         kwargs['batch_size'] = batch_size
         kwargs['channel_size'] = channel_size
@@ -64,7 +63,7 @@ class LISTAConvDict2dUntied(lista_convdict2d_base.LISTAConvDict2dBase):
         self.amount_of_kernals = kwargs.get('kernel_count', 64)
         self.kernel_size = kwargs.get('kernel_size', 7)
 
-        thrsh = kwargs.get('init_threshold', 1e-8)
+        thrsh = kwargs.get('init_threshold', 0.1)
         init_We = tf.nn.l2_normalize(tf.truncated_normal([self.kernel_size, self.kernel_size,
                                       self.input_channels, self.amount_of_kernals]), dim=[0,1])
         init_Wd = tf.transpose(tf.reverse(init_We, [0,1]), [0,1,3,2])

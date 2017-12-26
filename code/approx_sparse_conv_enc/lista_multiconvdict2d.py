@@ -139,4 +139,3 @@ class LISTAConvMultiDict2d(lista_convdict2d_base.LISTAConvDict2dBase):
         self._We = 0.1 * tf.nn.l2_normalize(self.build_we(expand_amount=2), [0,1])
         self._Wd = tf.nn.l2_normalize(tf.Variable(tf.transpose(tf.reverse(self._We,
             [0,1]), [0,1,3,2]), name='Wd'), dim=[0,1])
-        print self._We.shape

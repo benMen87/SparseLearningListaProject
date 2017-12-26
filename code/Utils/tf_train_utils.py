@@ -2,6 +2,12 @@ import os
 import tensorflow as tf
     
 
+def tf_sparse_count(tf_vec):
+    non_zeros = tf.not_equal(tf_vec, 0)
+    as_ints = tf.cast(non_zeros, tf.int32)
+    count = tf.reduce_mean(tf.reduce_sum(as_ints, axis=[1,2,3]))
+    return count
+
 def lerning_rate_timedecay(learning_rate, decay_rate, global_step, decay_steps):
     learning_rate = tf.train.inverse_time_decay(
             learning_rate=args.learning_rate,
@@ -31,14 +37,14 @@ def change_lr_val(sess, tf_lr, factor):
 class Saver():
     """Help handle save/restore logic"""
     def __init__(self, **kwargs):
-        print(kwargs)
         self._save = kwargs.get('save_model', False)
         self._load = kwargs.get('load_model', False)
         self._name = kwargs['name']
         self._path = kwargs['dir_path'] + '/logdir/models/' + self._name + '/'
         self._saver = None
 
-        print('#'*15+'\n'+'checkpoint dir %s\n'%self._path + '#'*15)
+        if self._save  or self._load:
+            print('#'*15+'\n'+'checkpoint dir %s\n'%self._path + '#'*15)
         
     def  __call__(self): 
         if self._save or self._load:
@@ -86,14 +92,15 @@ def config_train_tb(_model, tb_name, loss=None, add_stats=False):
     tensorboard_path = '/data/hillel/tb/' + tb_name + '/'
     if not os.path.isdir(tensorboard_path):
         os.mkdir(tensorboard_path)
+
     for var in tf.trainable_variables(): # TODO: see if this is better for debug than bellow
-        tf.summary.histogram(var.name, var)
+        tf.summary.scalar(var.name, tf.norm(var))
     
     if loss is not None:
         grads = tf.gradients(loss, tf.trainable_variables())
         grads = list(zip(grads, tf.trainable_variables()))
         for grad, var in grads:
-            tf.summary.histogram(var.name + '/gradient', grad)
+            tf.summary.scalar(var.name + '/gradient_norm', tf.norm(grad))
 
 
     if add_stats:

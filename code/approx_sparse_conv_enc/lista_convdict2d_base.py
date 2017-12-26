@@ -22,7 +22,6 @@ class LISTAConvDict2dBase(object):
             inputshape: Input X is encoded using conv2D(We, X).
             unroll_size: Amount of times to repeat lcod block.
         """
-        print(kwargs)
         self._unroll_count = unroll_count
         self.inputshape = kwargs.get('inputshape', None)
         self._batch_size = kwargs.get('batch_size', None)
@@ -58,7 +57,7 @@ class LISTAConvDict2dBase(object):
 
         if self._shrinkge_type == 'soft thresh':
             #TODO: Notice thresh is now shared one for each feture map
-            thrsh = kwargs.get('init_threshold', 1e-8)
+            thrsh = kwargs.get('init_threshold', 0.5)
             self._theta = tf.nn.relu(tf.Variable(tf.fill([1, self.amount_of_kernals],
                 thrsh), name='theta'))
           #       self.amount_of_kernals], value=0.01)), name='theta')] * unroll_count
@@ -115,7 +114,6 @@ class LISTAConvDict2dBase(object):
         self._Wd = tf.Variable(filter_arr, name='Wd', dtype=tf.float32)
 
     def _shrinkge(self):
-        print(self._shrinkge_type)
         if self._shrinkge_type == 'soft thresh':
             return self._soft_thrsh
         elif self._shrinkge_type == 'smooth soft thresh':
