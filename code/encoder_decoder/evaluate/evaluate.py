@@ -9,13 +9,13 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import time
-import argparse
 
 DIR_PATH = os.path.dirname(os.path.realpath(__file__))+'/../'
 sys.path.append(os.path.abspath(DIR_PATH))
 sys.path.append(os.path.abspath(DIR_PATH) + '/../')
 
 from Utils import psnr
+from Utils import lista_args
 from approx_sae.approx_conv2d_sparse_ae import ApproxCSC
 
 DEFAULT_IMAGE_PATH = '/data/hillel/data_sets/test_images/'
@@ -140,12 +140,14 @@ def main(args):
     Use to evaluate trained model on famous images (Lena etc.)
     """
     pad_size = args.kernel_size // 2
-    tetspath = args.test_path
-    testext = 'png' # TODO: make as user input
-    model_dir = args.model_path
-    test_imgs = [load(img_path) for img_path in glob.glob(tetspath + '/*' + testext)]
+    tetspath = args.image_path
+    extention = args.patt
+    model_dir = args.checkpoint_path
+    print(model_dir)
+    test_imgs = [load(img_path) for img_path in glob.glob(tetspath + '/*' + extention)]
 
-    sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+    sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) # release constraint of training  HW 
+
     model  = ApproxCSC(type=args.model_type)
     model.build_model(
         amount_stacked=args.amount_stacked,
@@ -174,8 +176,9 @@ def main(args):
     psnr_avg = np.mean([eval_result(_o, _r) for _o, _r in zip(test_imgs,
         im_results)])
 
+    savepath = args.savepath if args.savepath is not ' ' else DIR_PATH + '/logdir/'
     save_figs(
-        savepath=DIR_PATH + '/logdir/',
+        savepath=savepath,
         _noisy=test_imgs_n,
         _result=im_results,
         _orig=test_imgs,
@@ -186,24 +189,24 @@ if __name__ == '__main__':
     """
     From main run test on default images
     """
-    parser = argparse.ArgumentParser(description='evaluate model')
-    parser.add_argument('-ks', '--kernel_size', default=7, type=int,
-                                help='kernel size to be used in lista_conv')
-    parser.add_argument('-kc', '--kernel_count', default=64, type=int,
-                                help='amount of kernel to use in lista_conv')
-    parser.add_argument('-u', '--unroll_count', default=3,
-         type=int, help='Amount of Reccurent timesteps for decoder')
-    parser.add_argument('--model_path', default=DEFAULT_MODEL_DIR, type=str,
-        help='path of cpk file')
-    parser.add_argument('--task', default='multi_denoise', choices=['denoise',
-        'inpaint'], help='add noise to input')
-    parser.add_argument('--noise_sigma', '-ns', type=float, default=20,
-            help='noise magnitude')
-    parser.add_argument('--model_type', '-mt', default='untied', choices=['convdict', 'convmultidict', 'untied'])
-    parser.add_argument('--norm_kernal', '-nk', action='store_true',
-        help='keep kernels with unit norm') 
-    parser.add_argument('--test_path', '-tp',
-            default='/data/hillel/data_sets/test_images/')
-    parser.add_argument('--amount_stacked', '-as', default=1, type=int)
-    args = parser.parse_args()
-    main(args)
+    #parser = argparse.ArgumentParser(description='evaluate model')
+    #parser.add_argument('-ks', '--kernel_size', default=7, type=int,
+    #                            help='kernel size to be used in lista_conv')
+    #parser.add_argument('-kc', '--kernel_count', default=64, type=int,
+    #                            help='amount of kernel to use in lista_conv')
+    #parser.add_argument('-u', '--unroll_count', default=3,
+    #     type=int, help='Amount of Reccurent timesteps for decoder')
+    #parser.add_argument('--model_path', default=DEFAULT_MODEL_DIR, type=str,
+    #    help='path of cpk file')
+    #parser.add_argument('--task', default='multi_denoise', choices=['denoise',
+    #    'inpaint'], help='add noise to input')
+    #parser.add_argument('--noise_sigma', '-ns', type=float, default=20,
+    #        help='noise magnitude')
+    #parser.add_argument('--model_type', '-mt', default='untied', choices=['convdict', 'convmultidict', 'untied'])
+    #parser.add_argument('--norm_kernal', '-nk', action='store_true',
+    #    help='keep kernels with unit norm') 
+    #parser.add_argument('--test_path', '-tp',
+    #        default='/data/hillel/data_sets/test_images/')
+    #parser.add_argument('--amount_stacked', '-as', default=1, type=int)
+    #args = parser.parse_args()
+    main(lista_args.args())

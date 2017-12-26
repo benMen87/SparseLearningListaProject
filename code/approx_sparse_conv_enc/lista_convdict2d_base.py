@@ -57,7 +57,7 @@ class LISTAConvDict2dBase(object):
 
         if self._shrinkge_type == 'soft thresh':
             #TODO: Notice thresh is now shared one for each feture map
-            thrsh = kwargs.get('init_threshold', 0.5)
+            thrsh = kwargs.get('init_threshold', 0.1)
             self._theta = tf.nn.relu(tf.Variable(tf.fill([1, self.amount_of_kernals],
                 thrsh), name='theta'))
           #       self.amount_of_kernals], value=0.01)), name='theta')] * unroll_count
