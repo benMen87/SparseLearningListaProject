@@ -123,7 +123,7 @@ class LISTAConvDict2dDynamicThrshUntied(lista_convdict2d_untied.LISTAConvDict2dU
     @property
     def theta(self):
         _theta = super(LISTAConvDict2dDynamicThrshUntied, self).theta
-        _theta = tf.clip_by_value(_theta, 0, 1)
+        _theta = tf.clip_by_value(_theta, 0, 3)
         return self._dynamic_noise_layer._scale_thrsh * _theta
 
 #class LISTAConvDict2dDynamicThrsh(lista_convdict2d.LISTAConvDict2d):

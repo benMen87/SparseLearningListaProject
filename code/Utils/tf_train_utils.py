@@ -45,7 +45,7 @@ class Saver():
 
         if self._save  or self._load:
             print('#'*15+'\n'+'checkpoint dir %s\n'%self._path + '#'*15)
-        
+
     def  __call__(self): 
         if self._save or self._load:
             self._saver = tf.train.Saver(max_to_keep=1)
@@ -93,16 +93,17 @@ def config_train_tb(_model, tb_name, loss=None, add_stats=False):
     if not os.path.isdir(tensorboard_path):
         os.mkdir(tensorboard_path)
 
-    with tf.variable_scope('variables norm'):
+    with tf.variable_scope('variables_norm'):
         for var in tf.trainable_variables(): # TODO: see if this is better for debug than bellow
             tf.summary.scalar(var.name, tf.norm(var))
     
     if loss is not None:
         grads = tf.gradients(loss, tf.trainable_variables())
         grads = list(zip(grads, tf.trainable_variables()))
-        with tf.variable_scope('gradiant norm'):
+        with tf.variable_scope('gradiant_norm'):
             for grad, var in grads:
-                tf.summary.scalar(var.name + '/gradient_norm', tf.norm(grad))
+                print(var.name)
+                tf.summary.scalar(var.name, tf.norm(grad))
 
 
     if add_stats:

@@ -75,9 +75,11 @@ def train(_model, _datahandler):
 
         merged_only_tr = tf.summary.merge_all(key=tf.GraphKeys.SUMMARIES)
         merged = tf.summary.merge_all(key='TB_LOSS')
-        train_summ_writer = tf.summary.FileWriter(tensorboard_path + args.name)
+        train_summ_writer = tf.summary.FileWriter(tensorboard_path +
+                HYPR_PARAMS['name'])
         train_summ_writer.add_graph(sess.graph)
-        valid_summ_writer = tf.summary.FileWriter(tensorboard_path + args.name + '_valid')
+        valid_summ_writer = tf.summary.FileWriter(tensorboard_path +
+                HYPR_PARAMS['name'] + '_valid')
 
         saver_mngr.maybe_load(HYPR_PARAMS['load_name'], sess)
 
@@ -87,12 +89,12 @@ def train(_model, _datahandler):
             print('test loss: %f recon loss: %f' % (test_loss, test_recon_loss))
             exit(0)
 
-        if args.debug:
+        if HYPR_PARAMS['debug']:
             sess = tf_debug.LocalCLIDebugWrapperSession(sess)
             sess.add_tensor_filter("has_inf_or_nan", tf_debug.has_inf_or_nan)
 
-        print('number of epochs %d'%args.num_epochs)
-        for epoch in range(1, args.num_epochs + 1):
+        print('number of epochs %d'%HYPR_PARAMS['num_epochs'])
+        for epoch in range(1, HYPR_PARAMS['num_epochs'] + 1):
             epoch_loss = 0
             print('epoch number:%d'%epoch)
 
@@ -139,7 +141,7 @@ def train(_model, _datahandler):
                     validation_loss.append(valid_loss)
                     valid_sparsity_out = sp_out_itr/v_itr
                     if valid_loss <= np.min(validation_loss):
-                        if args.save_model:
+                        if HYPR_PARAMS['save_model']:
                             saver_mngr.save(sess, global_step=global_step)
                             print('saving model at: %s'%saver_mngr._name) 
                     if len(validation_loss)  > 5:
@@ -153,7 +155,7 @@ def train(_model, _datahandler):
                     summary = sess.run(merged, feed_dict)
                     valid_summ_writer.add_summary(summary, global_step=global_step.eval(session=sess))
 
-            print('epoch %d: loss val:%f' % (epoch, args.batch_size  * epoch_loss / X_train.shape[0]))
+            print('epoch %d: loss val:%f' % (epocha, HYPR_PARAMS['batch_size']  * epoch_loss / X_train.shape[0]))
 
         #run test
         save_path = DIR_PATH + '/logdir/'
@@ -162,7 +164,7 @@ def train(_model, _datahandler):
     
     print('='*40 + '\nTEST LOSS {}\n'.format(test_loss) + '='*40)
     plt.figure()
-    plot_num = np.sqrt(args.kernel_count)
+    plot_num = np.sqrt(HYPR_PARAMS['kernel_count'])
     fid = 0
     for f in decoder_filters.T:
         plt.subplot(plot_num, plot_num, fid+1)
