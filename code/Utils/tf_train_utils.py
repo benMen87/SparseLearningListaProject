@@ -45,7 +45,7 @@ class Saver():
 
         if self._save  or self._load:
             print('#'*15+'\n'+'checkpoint dir %s\n'%self._path + '#'*15)
-        
+
     def  __call__(self): 
         if self._save or self._load:
             self._saver = tf.train.Saver(max_to_keep=1)
@@ -102,7 +102,8 @@ def config_train_tb(_model, tb_name, loss=None, add_stats=False):
         grads = list(zip(grads, tf.trainable_variables()))
         with tf.variable_scope('gradiant_norm'):
             for grad, var in grads:
-                tf.summary.scalar(var.name + '/gradient_norm', tf.norm(grad))
+                print(var.name)
+                tf.summary.scalar(var.name, tf.norm(grad))
 
 
     if add_stats:
