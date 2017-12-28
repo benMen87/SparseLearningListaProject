@@ -47,7 +47,7 @@ class LISTARandNoiseDynamicThrsh(object):
             self._inputs_noisy = inputs 
             smpl_sigma = self.noise_sigma
         tf.summary.scalar('smpl_sigma', smpl_sigma)
-        self._scale_thrsh = tf.to_float(smpl_sigma) / self.thrsh_scale_factor
+        self._scale_thrsh = tf.square(tf.to_float(smpl_sigma) / self.thrsh_scale_factor)
 
     @property
     def inputs_noisy(self):

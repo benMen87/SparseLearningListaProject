@@ -26,19 +26,9 @@ class Pascal(LoadNpzData):
     def __init__(self):
         pass
     
-    def load(self, gray=True):
-        path = DEFAULT_DATA_PATH + gray*'psacal_gray.npz' + (1-gray)*'pascal.npz'
+    def load(self, large=True):
+        path = DEFAULT_DATA_PATH + large*'pascal320.npz' + (1-large)*'pascal120.npz'
         train, test = super(Pascal, self).load(path)
-        return train, test
-
-class PascalSmall(LoadNpzData):
-    """Load pascal dataset saved as npz"""    
-    def __init__(self):
-        pass
-    
-    def load(self):
-        path = DEFAULT_DATA_PATH + '/pascal_small.npz'
-        train, test = super(PascalSmall, self).load(path)
         return train, test
 
 class Berkeley(LoadNpzData):
@@ -84,7 +74,6 @@ class DataLoader(Pascal, Stl10, LoadDataFiles):
             'pascal': Pascal().load,
             'stl10': Stl10().load,
             'berkeley': Berkeley().load,
-            'pascal_small': PascalSmall().load
         }
 
     def __init__(self):

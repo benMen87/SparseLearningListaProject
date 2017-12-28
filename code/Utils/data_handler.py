@@ -78,6 +78,8 @@ class DataHandlerBase(DataLoader):
         self.valid = self.train[:valid_size] 
         self.train = self.train[valid_size:]
 
+        print('train size: {}, valid size: {}'.format(len(self.train),valid_size))
+
     @abstractmethod
     def preprocess_data(self, **kwargs):
        pass
@@ -143,6 +145,14 @@ class DataHandlerBase(DataLoader):
         @property
         def batch_num(self):
             return self._batch_num
+
+        @property
+        def epoch_num(self):
+            return self._epoch
+
+        @property
+        def size(self):
+            return self._data_len
 
 class DataHandler(DataHandlerBase):
     """

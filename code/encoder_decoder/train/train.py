@@ -58,7 +58,11 @@ def train(_model, _datahandler):
     train_dh = _datahandler.train_gen(batch_size)
     valid_dh = _datahandler.valid_gen(batch_size)
     test_dh = _datahandler.test_gen(10)
-    print('VALID BATCHED {}'.format(valid_dh._batchs_per_epoch))
+
+    print('#'*30)
+    print('TRAIN SET SIZE: {}'.format(train_dh.size))
+    print('TRAIN SET SIZE: {}'.format(valid_dh.size))
+    print('#'*30)
     ###################################################################
     #                Training   +   Results
     ###################################################################
@@ -85,7 +89,7 @@ def train(_model, _datahandler):
             test_batch = nextbatch(X=X_test, Y=Y_test, batch_size=5, run_once=True)
             test_loss, test_recon_loss = test(encoder, decoder, test_batch, loss)
             print('test loss: %f recon loss: %f' % (test_loss, test_recon_loss))
-            exit(0)
+            
 
         if args.debug:
             sess = tf_debug.LocalCLIDebugWrapperSession(sess)
@@ -142,8 +146,8 @@ def train(_model, _datahandler):
                         if args.save_model:
                             saver_mngr.save(sess, global_step=global_step)
                             print('saving model at: %s'%saver_mngr._name) 
-                    if len(validation_loss)  > 5:
-                        if (np.min(validation_loss) not in validation_loss[-5:]):
+                    if len(validation_loss)  > 10:
+                        if (valid_loss > validation_loss[-10:]).all():
                             tf_train_utils.change_lr_val(sess, learning_rate_var, 0.9) 
                             saver_mngr.restore(sess)
                             print('decreasing learning_rate to\

@@ -74,7 +74,6 @@ class LISTAConvDict2dUntied(lista_convdict2d_base.LISTAConvDict2dBase):
             self._Wd.append(tf.Variable(init_Wd, name='Wd'))
             self._theta.append(tf.nn.relu(tf.Variable(tf.fill([1, self.amount_of_kernals], thrsh), name='theta')))
 
-
     @property
     def Wd(self):
         return self._Wd[self.t - 1]
