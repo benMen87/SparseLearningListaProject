@@ -62,7 +62,7 @@ def test(_sess, _model, batch_gen, loss, savepath):
     return test_loss
 
 
-def infrence(_sess, _model, _images, _mask=None):
+def infrence(_sess, _model, _images, _mask=None, task='denoise', task_spesific_args_list=[]):
 
     feed_dict = {}
     _eval_list = [_model.sparsecode, _model.output]
@@ -72,23 +72,35 @@ def infrence(_sess, _model, _images, _mask=None):
     if not isinstance(_images, list):
         _images = [_images]
 
+    if 'dynamic' in task:
+        feed_dict[_model.encoder.sigma] = task_spesific_args_list[0]
+
+
     for im in _images:
         feed_dict[_model.input] =  [im]
         if _mask is not None:
             feed_dict[encd_mask] =  _mask
         Z, im_hat = infer(_sess, feed_dict, _eval_list)
+        print(_model.encoder._dynamic_noise_layer._scale_thrsh.eval(session=_sess, feed_dict=feed_dict))
         np.clip(im_hat, 0, 1)  # clip values
         im_results.append(im_hat[0])
         sc_results.append(Z)
     return im_results, sc_results
 
+def maybe_create_dir(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
 
 def save_figs(_noisy, _result, _orig=[], _sc=[], savepath='./', _names=''):
 
     save_data_path = savepath + '/data/'
-    if not os.path.exists(save_data_path):
-        os.makedirs(save_data_path)
+    save_plots_path = savepath + '/plots'
+    maybe_create_dir(save_data_path)
+    maybe_create_dir(save_plots_path)
+
+    _example_im_fp = lambda id: savepath + '/plots/' + str(id) + '.png'
     _save_np = save_data_path  + '/example_ims'
+
     np.savez(_save_np, X=_noisy, Y=_orig, Z=_sc, IM_hat=_result)
     print('saved example img data de/en at %s' % _save_np)
 
@@ -116,8 +128,7 @@ def save_figs(_noisy, _result, _orig=[], _sc=[], savepath='./', _names=''):
         axarr[1,0].set_title('reconstructed image -  psnr: {0:.3}\
                 [db]'.format(psnr.psnr(_o, _r)))
         axarr[1,0].axis('off')
-        example_ims = savepath + '/plots/' + str(_nm) + '.png'
-        f.savefig(example_ims)
+        f.savefig(_example_im_fp(_nm))
     plt.close()
 
 def load(img_path):
@@ -159,18 +170,19 @@ def main(args):
         kernel_size=args.kernel_size,
         kernel_count=args.kernel_count,
         channel_size=1, #TODO: fixthis
-        norm_kernal=args.norm_kernal
+        norm_kernal=args.norm_kernal,
+        is_train=False
     )
     saver = tf.train.Saver()
     saver.restore(sess, tf.train.latest_checkpoint(model_dir))
 
-    if args.task == 'denoise':
+    if 'denoise' in args.task:
         eps = args.noise_sigma
         test_imgs_n = [_n + np.random.normal(size=_n.shape, scale=(eps/255)) for _n in test_imgs ]
 
     test_imgs_n = [pad_image(_n, pad_size) for _n in test_imgs_n ]
     test_imgs_n = [_n[..., None] for _n in test_imgs_n]
-    im_results, sc_results = infrence(_sess=sess, _model=model, _images=test_imgs_n)
+    im_results, sc_results = infrence(_sess=sess, _model=model, _images=test_imgs_n, task=args.task, task_spesific_args_list=[eps])
 
     im_results = [np.squeeze(res[pad_size:-pad_size, pad_size:-pad_size,...]) for res in im_results]
     test_imgs_n = [np.squeeze(_n[pad_size:-pad_size, pad_size:-pad_size]) for _n in test_imgs_n]

@@ -23,10 +23,11 @@ class LISTARandNoiseDynamicThrsh(object):
             is_train=True
             ):
 
+        print('is train: {}'.format(is_train))
         self.sigmas = sigmas
         self.thrsh_scale_factor = thrsh_scale_factor
         self.sigma_scale_factor = sigma_scale_factor
-        self.noise_sigma = 0 if is_train else tf.placeholder_with_default(0, shape=())
+        self.noise_sigma = 0 if is_train else tf.placeholder(tf.float32, name='dynamic_noise_sigma')
 
     def gaussian_noise_layer(self, input_layer, std):
         noise = tf.random_normal(shape=tf.shape(input_layer), mean=0.0, stddev=std, dtype=tf.float32) 
@@ -74,7 +75,8 @@ class LISTAConvDict2dDynamicThrsh(lista_convdict2d.LISTAConvDict2d):
         self._dynamic_noise_layer = LISTARandNoiseDynamicThrsh(
             thrsh_scale_factor=thrsh_scale_factor,
             sigmas=sigmas,
-            sigma_scale_factor=sigma_scale_factor)
+            sigma_scale_factor=sigma_scale_factor,
+            is_train=kwargs.get('is_train', True))
 
     def build_model(self, inputs):
         self._dynamic_noise_layer.noise_adaptive_threshold(inputs)
@@ -88,6 +90,10 @@ class LISTAConvDict2dDynamicThrsh(lista_convdict2d.LISTAConvDict2d):
     def theta(self):
         _theta = tf.clip_by_value(self._theta, 0, 1)
         return self._dynamic_noise_layer._scale_thrsh * _theta
+    
+    @property
+    def sigma(self):
+        return self._dynamic_noise_layer.noise_sigma
 
 class LISTAConvDict2dDynamicThrshUntied(lista_convdict2d_untied.LISTAConvDict2dUntied):
     """Class of approximate SC based on 2D convolutinal dictioary.
@@ -110,7 +116,8 @@ class LISTAConvDict2dDynamicThrshUntied(lista_convdict2d_untied.LISTAConvDict2dU
         self._dynamic_noise_layer = LISTARandNoiseDynamicThrsh(
             thrsh_scale_factor=thrsh_scale_factor,
             sigmas=sigmas,
-            sigma_scale_factor=sigma_scale_factor)
+            sigma_scale_factor=sigma_scale_factor,
+            is_train=kwargs.get('is_train', True))
 
     def build_model(self, inputs):
         self._dynamic_noise_layer.noise_adaptive_threshold(inputs)
@@ -125,6 +132,11 @@ class LISTAConvDict2dDynamicThrshUntied(lista_convdict2d_untied.LISTAConvDict2dU
         _theta = super(LISTAConvDict2dDynamicThrshUntied, self).theta
         _theta = tf.clip_by_value(_theta, 0, 3)
         return self._dynamic_noise_layer._scale_thrsh * _theta
+
+    @property
+    def sigma(self):
+        return self._dynamic_noise_layer.noise_sigma
+
 
 #class LISTAConvDict2dDynamicThrsh(lista_convdict2d.LISTAConvDict2d):
 #    """Class of approximate SC based on 2D convolutinal dictioary.
