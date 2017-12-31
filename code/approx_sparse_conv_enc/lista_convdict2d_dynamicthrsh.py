@@ -38,7 +38,6 @@ class LISTARandNoiseDynamicThrsh(object):
         If noise_sigma placeholder is set then input is noisy 
         if noise_sigma is None then sample noise
         """
-
         if self.noise_sigma == 0: #i.e. input clean we sample and add noise
             smpl_sigma = tf.random_shuffle(self.sigmas)
             smpl_sigma = smpl_sigma[0]
@@ -47,7 +46,8 @@ class LISTARandNoiseDynamicThrsh(object):
             self._inputs_noisy = inputs 
             smpl_sigma = self.noise_sigma
         tf.summary.scalar('smpl_sigma', smpl_sigma)
-        self._scale_thrsh = tf.square(tf.to_float(smpl_sigma) / self.thrsh_scale_factor)
+        self._scale_thrsh = tf.to_float(smpl_sigma) / self.thrsh_scale_factor
+        self._scale_thrsh = tf.square(self._scale_thrsh)
 
     @property
     def inputs_noisy(self):

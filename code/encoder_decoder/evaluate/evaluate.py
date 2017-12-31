@@ -73,7 +73,7 @@ def infrence(_sess, _model, _images, _mask=None):
         _images = [_images]
 
     for im in _images:
-        feed_dict = {_model.input: [im]}
+        feed_dict[_model.input] =  [im]
         if _mask is not None:
             feed_dict[encd_mask] =  _mask
         Z, im_hat = infer(_sess, feed_dict, _eval_list)
@@ -85,7 +85,10 @@ def infrence(_sess, _model, _images, _mask=None):
 
 def save_figs(_noisy, _result, _orig=[], _sc=[], savepath='./', _names=''):
 
-    _save_np = savepath + '/data/example_ims'
+    save_data_path = savepath + '/data/'
+    if not os.path.exists(save_data_path):
+        os.makedirs(save_data_path)
+    _save_np = save_data_path  + '/example_ims'
     np.savez(_save_np, X=_noisy, Y=_orig, Z=_sc, IM_hat=_result)
     print('saved example img data de/en at %s' % _save_np)
 
@@ -189,24 +192,4 @@ if __name__ == '__main__':
     """
     From main run test on default images
     """
-    #parser = argparse.ArgumentParser(description='evaluate model')
-    #parser.add_argument('-ks', '--kernel_size', default=7, type=int,
-    #                            help='kernel size to be used in lista_conv')
-    #parser.add_argument('-kc', '--kernel_count', default=64, type=int,
-    #                            help='amount of kernel to use in lista_conv')
-    #parser.add_argument('-u', '--unroll_count', default=3,
-    #     type=int, help='Amount of Reccurent timesteps for decoder')
-    #parser.add_argument('--model_path', default=DEFAULT_MODEL_DIR, type=str,
-    #    help='path of cpk file')
-    #parser.add_argument('--task', default='multi_denoise', choices=['denoise',
-    #    'inpaint'], help='add noise to input')
-    #parser.add_argument('--noise_sigma', '-ns', type=float, default=20,
-    #        help='noise magnitude')
-    #parser.add_argument('--model_type', '-mt', default='untied', choices=['convdict', 'convmultidict', 'untied'])
-    #parser.add_argument('--norm_kernal', '-nk', action='store_true',
-    #    help='keep kernels with unit norm') 
-    #parser.add_argument('--test_path', '-tp',
-    #        default='/data/hillel/data_sets/test_images/')
-    #parser.add_argument('--amount_stacked', '-as', default=1, type=int)
-    #args = parser.parse_args()
     main(lista_args.args())
