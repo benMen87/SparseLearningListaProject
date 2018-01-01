@@ -81,7 +81,6 @@ def infrence(_sess, _model, _images, _mask=None, task='denoise', task_spesific_a
         if _mask is not None:
             feed_dict[encd_mask] =  _mask
         Z, im_hat = infer(_sess, feed_dict, _eval_list)
-        print(_model.encoder._dynamic_noise_layer._scale_thrsh.eval(session=_sess, feed_dict=feed_dict))
         np.clip(im_hat, 0, 1)  # clip values
         im_results.append(im_hat[0])
         sc_results.append(Z)
