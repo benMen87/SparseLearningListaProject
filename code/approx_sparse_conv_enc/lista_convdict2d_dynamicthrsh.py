@@ -1,6 +1,5 @@
 """
-This module contanint Class LISTAConvDict2d
-That an TF model for approximation CSC.
+This module contanint Class LISTAConvDict2dDynamicThrsh.
 The model will scale  its thrshold based on noise sigma.
 """
 import sys
@@ -10,10 +9,9 @@ import lista_convdict2d
 import lista_convdict2d_untied
 
 class LISTARandNoiseDynamicThrsh(object):
-    """Class of approximate SC based on 2D convolutinal dictioary.
-       x = sum(f_l*Z_l) = (circ(f_0)|circ(f_1)|...|circ(f_n))[Z_0|..|Z_n]
-       -> Wd = (circ(f_0)|circ(f_1)|...|circ(f_n)) or 1 filter with depth of n
-       -> We = (circ(f_0)|circ(f_1)|...|circ(f_n))^T or n fiters with depth of 1
+    """ 
+    Train: Select random sigma from list add noise to input and scale thrsh.
+    Test: scale thrsh accroding to sigma.
     """
     def __init__(
             self,

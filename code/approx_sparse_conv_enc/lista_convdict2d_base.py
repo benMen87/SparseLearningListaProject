@@ -29,6 +29,7 @@ class LISTAConvDict2dBase(object):
         self._shrinkge_type = kwargs.get('shrinkge_type', 'soft thresh')
         self._norm_kers = kwargs.get('norm_kernal', True)
         self.t = 0  # number of ista iteration 
+        self._mask = None
 
         #
         # model variables
@@ -161,16 +162,12 @@ class LISTAConvDict2dBase(object):
         """
         mask - In case of inpainting etc.
         """
-        self._mask = tf.placeholder_with_default(
-            tf.ones_like(inputs),
-            shape=inputs.shape,
-            name='mask'
-        )
         shrinkge_fn = self._shrinkge()
+        self._creat_mask()
 
-        X = tf.multiply(inputs, self._mask)
+        #X = tf.multiply(inputs, self._mask)
         B = self._conv2d_enc(
-            _val=X,
+            _val=inputs,
             _name='bias'
             ) 
         self._Z = shrinkge_fn(B, self.theta, 'Z_0')
@@ -178,14 +175,12 @@ class LISTAConvDict2dBase(object):
         #
         # run unrolling
         for self.t in range(1, self._unroll_count):
+
             conv_wd = self._conv2d_dec(
                 _val=self._Z,
                 _name='convWd'
                 )
-            conv_wd = tf.multiply(
-               conv_wd,
-               self._mask
-               )
+            conv_wd = self._apply_mask(conv_wd)
             conv_we = self._conv2d_enc(
                _val=conv_wd,
                _name='convWe'
@@ -198,6 +193,16 @@ class LISTAConvDict2dBase(object):
                 'Z_'+str(self.t)
                 )
             tf.add_to_collection('SC_Zt', self._Z)
+
+    def _creat_mask(self, shape):
+        self._mask = tf.placeholder_with_default(
+            tf.ones_like(inputs),
+            shape=inputs.shape,
+            name='mask'
+        )
+    
+    def _apply_mask(self, inputs):
+        return tf.multiply(inputs, self._mask)
 
     def output_shape(self):
         return self._Z.get_shape().as_list()
@@ -217,7 +222,6 @@ class LISTAConvDict2dBase(object):
     @property
     def mask(self):
         return self._mask
-
 
     @property
     def output(self):

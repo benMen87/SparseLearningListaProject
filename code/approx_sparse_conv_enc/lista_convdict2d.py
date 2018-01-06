@@ -1,6 +1,6 @@
 """
-This module contanint Class LISTAConvDict2d
-That an TF model for approximation CSC
+This module contanins Class LISTAConvDict2d.
+This class is  a TF implemintation of  approximation CSC.
 """
 import sys
 import tensorflow as tf
