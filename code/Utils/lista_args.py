@@ -11,14 +11,24 @@ def args(train_mode=False):
          type=int, help='Amount of Reccurent timesteps for decoder')
     parser.add_argument('--shrinkge_type', default='soft thresh',
                             choices=['soft thresh', 'smooth soft thresh'])
-    parser.add_argument('--task',  default='denoise', choices=['denoise', 'denoise_dynamicthrsh', 'inpaint', 'multi_noise'], 
+    parser.add_argument('--task',  default='denoise', choices=['denoise',
+                                                              'denoise_dynamicthrsh',
+                                                              'inpaint',
+                                                              'multi_noise',
+                                                              'deblur'], 
             help='add noise to input')
     parser.add_argument('--grayscale',  action='store_true', help='converte RGB images to grayscale')
     parser.add_argument('--inpaint_keep_prob', '-p', type=float, default=0.5,
             help='probilty to sample pixel')
     parser.add_argument('--noise_sigma', '-ns', type=float, default=20,
             help='noise magnitude')
-    parser.add_argument('--model_type', '-mt', default='convdict', choices=['convdict', 'convmultidict', 'untied', 'dynamicthrsh', 'dynamicthrsh_untied'])
+    parser.add_argument('--model_type', '-mt', default='adaptive_deblur', choices=['convdict', 
+                                                                            'convmultidict',
+                                                                             'untied',
+                                                                             'dynamicthrsh',
+                                                                             'dynamicthrsh_untied',
+                                                                             'adaptive_deblur',
+                                                                             'adaptive_deblur_untied'])
     parser.add_argument('--norm_kernal',  action='store_true', help='keep kernals with unit kernels')
     parser.add_argument('--amount_stacked',  default=1, type=int, help='Amount of LISTA AE to stack')
 #TODO: add args for dynamic thresholding

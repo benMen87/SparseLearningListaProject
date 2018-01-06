@@ -45,7 +45,8 @@ class DataHandlerBase(DataLoader):
             return DataHandlerInpaint(**DS_ARGS)
         elif kwargs['task'] == 'denoise_dynamicthrsh':
             return DataHandler(**DS_ARGS)
-            
+        elif kwargs['task'] == 'deblur':
+            return DataHandler(**DS_ARGS)
         else:
             raise BadDsNameOrPath()
 

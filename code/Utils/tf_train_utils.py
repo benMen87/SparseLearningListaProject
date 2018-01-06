@@ -123,6 +123,8 @@ def config_train_tb(_model, tb_name, loss=None, add_stats=False):
 
     if 'dynamicthrsh' in  _model.type:
         tf.summary.image('input', _model.encoder.inputs_noisy)
+    elif 'adaptive_deblur' in _model.type:
+        tf.summary.image('input', _model.encoder.inputs_blur)
     else:
         tf.summary.image('input', _model.input)
 

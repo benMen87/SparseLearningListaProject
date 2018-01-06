@@ -6,7 +6,7 @@ import numpy as np
 import stl10_input
 
 
-DEFAULT_DATA_PATH = '/data/hillel/data_sets/'
+DEFAULT_DATA_PATH = '~/projects/SparseLearningListaProject/images'
 
 class LoadNpzData(object):
 
