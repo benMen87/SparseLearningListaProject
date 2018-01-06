@@ -94,7 +94,7 @@ class LISTAConvDict2dAdaptiveBlurUntied(lista_convdict2d_untied.LISTAConvDict2dU
             **kwargs
             ):
 
-        super(LISTAConvDict2dAdaptiveBlur, self).__init__(
+        super(LISTAConvDict2dAdaptiveBlurUntied, self).__init__(
             **kwargs
             )
         # TODO: add test support select specific psf
@@ -105,7 +105,7 @@ class LISTAConvDict2dAdaptiveBlurUntied(lista_convdict2d_untied.LISTAConvDict2dU
 
     def build_model(self, inputs):
         self._inputs_blur, self._psf = self._blur_layer(inputs)
-        super(LISTAConvDict2dAdaptiveBlur, self).build_model(self.inputs_noisy)
+        super(LISTAConvDict2dAdaptiveBlurUntied, self).build_model(self._inputs_blur)
 
     def _creat_mask(self, shape):
         # Overide base class _creat_mask method.
