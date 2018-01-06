@@ -163,7 +163,7 @@ class LISTAConvDict2dBase(object):
         mask - In case of inpainting etc.
         """
         shrinkge_fn = self._shrinkge()
-        self._creat_mask()
+        self._creat_mask(tf.shape(inputs))
 
         #X = tf.multiply(inputs, self._mask)
         B = self._conv2d_enc(

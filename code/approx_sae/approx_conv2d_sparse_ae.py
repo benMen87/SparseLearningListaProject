@@ -109,9 +109,9 @@ class ApproxCSC(AutoEncoderBase):
         elif self._type == 'dynamicthrsh_untied':
             encoder_fn = lista_convdict2d_dynamicthrsh.LISTAConvDict2dDynamicThrshUntied
         elif self._type == 'adaptive_deblur':
-            encoder_fn = lista_convdict2d_adptive_deblure.LISTAConvDict2dDynamicThrsh
+            encoder_fn = lista_convdict2d_adptive_deblure.LISTAConvDict2dAdaptiveBlur
         elif self._type == 'adaptive_deblur_untied':
-            encoder_fn = lista_convdict2d_dynamicthrsh.LISTAConvDict2dDynamicThrshUntied
+            encoder_fn = lista_convdict2d_dynamicthrsh.LISTAConvDict2dAdaptiveBlurUntied
         else:
             # shouldn't reach here
             raise SystemError("Shouldn't reach here")
