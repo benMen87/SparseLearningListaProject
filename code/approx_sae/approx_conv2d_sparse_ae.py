@@ -14,6 +14,7 @@ from approx_sparse_conv_enc import lista_convdict2d
 from approx_sparse_conv_enc import lista_multiconvdict2d
 from approx_sparse_conv_enc import lista_convdict2d_untied
 from approx_sparse_conv_enc import lista_convdict2d_dynamicthrsh
+from approx_sparse_conv_enc import lista_convdict2d_adptive_deblure
 from approx_sparse_conv_dec import dec_convdict2d
 
 class AutoEncoderBase(object):
@@ -48,7 +49,15 @@ class AutoEncoderBase(object):
             return _val
 
 class ApproxCSC(AutoEncoderBase):
-    LEGALE_TPYES = ['convdict', 'convmultidict', 'untied', 'dynamicthrsh', 'dynamicthrsh_untied']
+    LEGALE_TPYES = [
+        'convdict',
+        'convmultidict',
+        'untied',
+        'dynamicthrsh',
+        'dynamicthrsh_untied',
+        'adaptive_deblur',
+        'adaptive_deblur_untied'
+    ]
 
     def __init__(self, type='convdict', **kwargs):
         super(ApproxCSC, self).__init__()
@@ -98,6 +107,10 @@ class ApproxCSC(AutoEncoderBase):
         elif self._type == 'dynamicthrsh':
             encoder_fn = lista_convdict2d_dynamicthrsh.LISTAConvDict2dDynamicThrsh
         elif self._type == 'dynamicthrsh_untied':
+            encoder_fn = lista_convdict2d_dynamicthrsh.LISTAConvDict2dDynamicThrshUntied
+        elif self._type == 'adaptive_deblur':
+            encoder_fn = lista_convdict2d_adptive_deblure.LISTAConvDict2dDynamicThrsh
+        elif self._type == 'adaptive_deblur_untied':
             encoder_fn = lista_convdict2d_dynamicthrsh.LISTAConvDict2dDynamicThrshUntied
         else:
             # shouldn't reach here
