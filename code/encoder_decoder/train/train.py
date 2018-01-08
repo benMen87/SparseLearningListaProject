@@ -5,7 +5,7 @@ import tensorflow as tf
 import argparse
 from tensorflow.python import debug as tf_debug
 import matplotlib
-#matplotlib.use('Agg')
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import scipy.io as scio
 
@@ -200,7 +200,8 @@ def main():
         shrinkge_type=HYPR_PARAMS['shrinkge_type'],
         kernel_count=HYPR_PARAMS['kernel_count'],
         channel_size=dh.shape[-1],
-        norm_kernal=HYPR_PARAMS['norm_kernal']
+        norm_kernal=HYPR_PARAMS['norm_kernal'],
+        psf_id=HYPR_PARAMS['psf_id']
     )
     print('Amount of params: {}'.format(param_count()))
     train(_datahandler=dh, _model=model)

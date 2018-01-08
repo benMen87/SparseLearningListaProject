@@ -31,8 +31,7 @@ def args(train_mode=False):
                                                                              'adaptive_deblur_untied'])
     parser.add_argument('--norm_kernal',  action='store_true', help='keep kernals with unit kernels')
     parser.add_argument('--amount_stacked',  default=1, type=int, help='Amount of LISTA AE to stack')
-#TODO: add args for dynamic thresholding
-    
+    parser.add_argument('--psf_id',  default=1, type=int, help='psf to use -1 for random comb (-1 is only for training)')
     if train_mode:
         parser.add_argument('--name', default='lista_conv2d', type=str, help='used for\
             creating load/store log dir names')

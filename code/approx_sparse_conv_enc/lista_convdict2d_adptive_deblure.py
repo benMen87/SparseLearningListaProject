@@ -11,12 +11,12 @@ import lista_convdict2d_untied
 
 class TFPSFLayer(object):
     """    """
-    def __init__(self, sigma=8):
+    def __init__(self, psf_id=-1):
 
-        self._psfs = tf.stack([self._creat_psf1(), self._creat_psf2(),
-                self._creat_psf3()])
-        print(self._psfs[0].shape)
-        self._sigma = float(sigma) / 255
+        self._psfs = tf.concat([self._creat_psf1(), self._creat_psf2(),
+                self._creat_psf3()], axis=-1)
+        self._sigma = tf.sqrt(2.) / 255  # sigma^2 = 2
+        self._psf_id = psf_id
 
     def _creat_psf1(self):
         ker = np.empty(shape=(15, 15)).astype('float32')
@@ -41,12 +41,25 @@ class TFPSFLayer(object):
         ker = ker[..., None, None]
         return tf.Variable(ker, trainable=False)
 
+    def _get_psf(self):
+        """
+        Linear combiantion of of the 3 defined psfs
+        """
+        if self._psf_id == -1:
+            alphas = tf.random_uniform(shape=[3])
+            alphas /= tf.reduce_sum(alphas)
+            _psf = tf.reduce_sum(alphas * self._psfs, axis=-1, keep_dims=True)
+        else:
+            _psf = self._psfs[...,self._psf_id][...,None]
+        return _psf
+
+
     def __call__(self, inputs):
         """
         Train-time function. choose random psf from list and add noise.
         """
 
-        _psf = tf.random_shuffle(self._psfs)[0]
+        _psf = self._get_psf()
         inputs_blur = tf.nn.conv2d(inputs, _psf, strides=[1,1,1,1], padding='SAME')
         inputs_blur += tf.random_normal(shape=tf.shape(inputs),
                 stddev=self._sigma, dtype=tf.float32) 
@@ -64,7 +77,8 @@ class LISTAConvDict2dAdaptiveBlur(lista_convdict2d.LISTAConvDict2d):
             )
         # TODO: add test support select specific psf
         self.is_train = kwargs.get('is_train', True)
-        self._blur_layer = TFPSFLayer()
+        self._psf_id = kwargs.get('psf_id')
+        self._blur_layer = TFPSFLayer(self._psf_id)
         self._mask = None
         self._inputs_blur = None
 
@@ -99,7 +113,9 @@ class LISTAConvDict2dAdaptiveBlurUntied(lista_convdict2d_untied.LISTAConvDict2dU
             )
         # TODO: add test support select specific psf
         self.is_train = kwargs.get('is_train', True)
-        self._blur_layer = TFPSFLayer()
+        self._psf_id = kwargs.get('psf_id')
+        self._blur_layer = TFPSFLayer(self._psf_id)
+
         self._mask = None
         self._inputs_blur = None
 
