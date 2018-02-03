@@ -18,6 +18,9 @@ from Utils import psnr
 from Utils import lista_args
 from approx_sae.approx_conv2d_sparse_ae import ApproxCSC
 
+import os
+#os.environ['CUDA_VISIBLE_DEVICES']='1'
+
 DEFAULT_IMAGE_PATH = '/data/hillel/data_sets/test_images/'
 DEFAULT_MODEL_DIR = \
     '/home/hillel/projects/dev/SparseLearningListaProject/code/encoder_decoder/logdir/models/u10_kc64_ks3_untied'
@@ -68,11 +71,15 @@ def infrence(_sess, _model, _images, _mask=None, task='denoise', task_spesific_a
     _eval_list = [_model.sparsecode, _model.output]
     im_results = []
     sc_results = []
+    img_n      = []
 
     if not isinstance(_images, list):
         _images = [_images]
 
-    if 'dynamic' in task:
+    if 'deblur' in task:
+        _eval_list.append(_model.encoder._inputs_blur)
+
+    if 'dynamic' in task and 'denoise' in task:
         feed_dict[_model.encoder.sigma] = task_spesific_args_list[0]
 
 
@@ -80,11 +87,17 @@ def infrence(_sess, _model, _images, _mask=None, task='denoise', task_spesific_a
         feed_dict[_model.input] =  [im]
         if _mask is not None:
             feed_dict[encd_mask] =  _mask
-        Z, im_hat = infer(_sess, feed_dict, _eval_list)
+        if 'denoise' in task:
+            Z, im_hat = infer(_sess, feed_dict, _eval_list)
+        elif 'deblur' in task:
+            Z, im_hat, blur_im = infer(_sess, feed_dict, _eval_list)
+            img_n.append(blur_im[0,...])
+
         np.clip(im_hat, 0, 1)  # clip values
         im_results.append(im_hat[0])
         sc_results.append(Z)
-    return im_results, sc_results
+
+    return im_results, sc_results, img_n
 
 def maybe_create_dir(path):
     if not os.path.exists(path):
@@ -99,7 +112,6 @@ def save_figs(_noisy, _result, _orig=[], _sc=[], savepath='./', _names=''):
 
     _example_im_fp = lambda id: savepath + '/plots/' + str(id) + '.png'
     _save_np = save_data_path  + '/example_ims'
-
     np.savez(_save_np, X=_noisy, Y=_orig, Z=_sc, IM_hat=_result)
     print('saved example img data de/en at %s' % _save_np)
 
@@ -170,7 +182,8 @@ def main(args):
         kernel_count=args.kernel_count,
         channel_size=1, #TODO: fixthis
         norm_kernal=args.norm_kernal,
-        is_train=False
+        is_train=False,
+        psf_id=args.psf_id
     )
     saver = tf.train.Saver()
     saver.restore(sess, tf.train.latest_checkpoint(model_dir))
@@ -178,17 +191,20 @@ def main(args):
     if 'denoise' in args.task:
         eps = args.noise_sigma
         test_imgs_n = [_n + np.random.normal(size=_n.shape, scale=(eps/255)) for _n in test_imgs ]
+    elif 'deblur' in args.task:
+        test_imgs_n = test_imgs # images are corupted as part of input model
 
     test_imgs_n = [pad_image(_n, pad_size) for _n in test_imgs_n ]
     test_imgs_n = [_n[..., None] for _n in test_imgs_n]
-    im_results, sc_results = infrence(_sess=sess, _model=model, _images=test_imgs_n, task=args.task, task_spesific_args_list=[eps])
 
+    im_results, sc_results, test_imgs_n = infrence(_sess=sess, _model=model, _images=test_imgs_n, task=args.task)#, task_spesific_args_list=[eps])
     im_results = [np.squeeze(res[pad_size:-pad_size, pad_size:-pad_size,...]) for res in im_results]
     test_imgs_n = [np.squeeze(_n[pad_size:-pad_size, pad_size:-pad_size]) for _n in test_imgs_n]
     sc_results = [np.squeeze(_sc) for _sc in sc_results]
 
     psnr_avg = np.mean([eval_result(_o, _r) for _o, _r in zip(test_imgs,
         im_results)])
+    print('PSNR avrage is {}'.format(psnr_avg))
 
     savepath = args.savepath if args.savepath is not ' ' else DIR_PATH + '/logdir/'
     save_figs(
@@ -197,8 +213,7 @@ def main(args):
         _result=im_results,
         _orig=test_imgs,
         _sc=sc_results)
-    print('PSNR avrage is {}'.format(psnr_avg))
-
+    
 if __name__ == '__main__':
     """
     From main run test on default images

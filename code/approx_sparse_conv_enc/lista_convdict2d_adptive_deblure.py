@@ -13,8 +13,7 @@ class TFPSFLayer(object):
     """    """
     def __init__(self, psf_id=-1):
 
-        self._psfs = tf.concat([self._creat_psf1(), self._creat_psf2(),
-                self._creat_psf3()], axis=-1)
+        self._fn_psfs =  [self._creat_psf1, self._creat_psf2, self._creat_psf3]
         self._sigma = tf.sqrt(2.) / 255  # sigma^2 = 2
         self._psf_id = psf_id
 
@@ -24,22 +23,22 @@ class TFPSFLayer(object):
             for x2 in range(-7, 8):
                 ker[x1+7, x2+7] = 1.0 / (1 + x1**2 + x2**2)
         ker /= np.sum(ker)
-        ker = ker[..., None, None]
-        return tf.Variable(ker, trainable=False)
+        ker = ker[..., None]
+        return tf.constant(ker) 
 
     def _creat_psf2(self):
-        ker = np.pad(np.ones(shape=(9, 9)), 3, 'constant',
-                constant_values=0).astype('float32');
+        ker = np.ones(shape=(9, 9)).astype('float32');
         ker /= np.sum(ker)
-        ker = ker[..., None, None]
-        return tf.Variable(ker, trainable=False)
+        ker = ker[..., None]
+        return tf.constant(ker)
 
     def _creat_psf3(self):
         row = np.array([[1, 4, 6, 4, 1]]).astype('float32')
-        ker = np.pad(row.T * row, 5, 'constant', constant_values=0) # padd 0
+#        ker = np.pad(row.T * row, 5, 'constant', constant_values=0) # padd 0
+        ker = row.T * row
         ker /= np.sum(ker)
-        ker = ker[..., None, None]
-        return tf.Variable(ker, trainable=False)
+        ker = ker[..., None]
+        return tf.constant(ker)
 
     def _get_psf(self):
         """
@@ -48,9 +47,17 @@ class TFPSFLayer(object):
         if self._psf_id == -1:
             alphas = tf.random_uniform(shape=[3])
             alphas /= tf.reduce_sum(alphas)
+            _scale = tf.random_uniform(shape=[1], minval=5,  maxval=15, dtype=tf.int32)
+            _psfs = [ tf.image.resize_images(fn_psf(), size=[_scale[0],
+                _scale[0]])[...,None] for fn_psf in self._fn_psfs ]
+            self._psfs = tf.concat(_psfs, axis=-1)
+            # Random linear combination of filters
             _psf = tf.reduce_sum(alphas * self._psfs, axis=-1, keep_dims=True)
+            # Reduce sum to 1.
+            _psf /= tf.reduce_sum(_psf) 
+
         else:
-            _psf = self._psfs[...,self._psf_id][...,None]
+            _psf = self._fn_psfs[self._psf_id]()[...,None]
         return _psf
 
 
@@ -91,11 +98,8 @@ class LISTAConvDict2dAdaptiveBlur(lista_convdict2d.LISTAConvDict2d):
         self._mask = self._psf
     
     def _apply_mask(self, inputs):
-        return tf.nn.conv2d(inputs,
-                            self._mask,
-                            strides=[1,1,1,1],
-                            padding='SAME'
-                            )
+        apply_mask = tf.nn.conv2d(inputs, self._mask, strides=[1,1,1,1], padding='SAME')
+        return apply_mask_t
 
     @property
     def inputs_blur(self):
@@ -128,11 +132,8 @@ class LISTAConvDict2dAdaptiveBlurUntied(lista_convdict2d_untied.LISTAConvDict2dU
         self._mask = self._psf
     
     def _apply_mask(self, inputs):
-        return tf.nn.conv2d(inputs,
-                            self._mask,
-                            strides=[1,1,1,1],
-                            padding='SAME'
-                            )
+        return tf.nn.conv2d(inputs, self._mask, strides=[1,1,1,1],
+                padding='SAME')
 
     @property
     def inputs_blur(self):

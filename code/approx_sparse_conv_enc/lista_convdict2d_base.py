@@ -131,7 +131,7 @@ class LISTAConvDict2dBase(object):
         and b controls the location of the kink
         """
         beta, b = theta
-        
+
         def smooth_relu(x, beta, b, name):
             first = beta * b * tf.ones_like(x)
             second = beta * x
@@ -165,9 +165,9 @@ class LISTAConvDict2dBase(object):
         shrinkge_fn = self._shrinkge()
         self._creat_mask(tf.shape(inputs))
 
-        #X = tf.multiply(inputs, self._mask)
+        X = self._apply_mask(inputs)
         B = self._conv2d_enc(
-            _val=inputs,
+            _val=X,
             _name='bias'
             ) 
         self._Z = shrinkge_fn(B, self.theta, 'Z_0')
@@ -180,7 +180,7 @@ class LISTAConvDict2dBase(object):
                 _val=self._Z,
                 _name='convWd'
                 )
-            conv_wd = self._apply_mask(conv_wd)
+            conv_wd = self._apply_mask(self._apply_mask(conv_wd))
             conv_we = self._conv2d_enc(
                _val=conv_wd,
                _name='convWe'
