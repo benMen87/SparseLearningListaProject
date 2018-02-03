@@ -195,9 +195,10 @@ class LISTAConvDict2dBase(object):
             tf.add_to_collection('SC_Zt', self._Z)
 
     def _creat_mask(self, shape):
+        _ones = tf.ones(shape)
         self._mask = tf.placeholder_with_default(
-            tf.ones_like(inputs),
-            shape=inputs.shape,
+            _ones,
+            shape=_ones.get_shape(),
             name='mask'
         )
     
