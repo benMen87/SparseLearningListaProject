@@ -36,6 +36,8 @@ class DataHandlerBase(DataLoader):
         if kwargs['task'] == 'denoise':
             DS_ARGS['noise_sigma'] = kwargs['noise_sigma']
             return DataHandlerNoise(**DS_ARGS)
+        elif kwargs['task'] == 'doc_clean':
+            return DataHandlerSP(**DS_ARGS)
         elif kwargs['task'] == 'multi_denoise':
             DS_ARGS['noise_sigma'] = kwargs['noise_sigma']
             DS_ARGS['dup_count'] = kwargs['dup_count']
@@ -269,3 +271,61 @@ class DataHandlerInpaint(DataHandlerBase):
 
     def test_gen(self, batch_size, run_once=True):
         return self.xy_gen(self.test, batch_size, run_once)
+
+class DataHandlerSP(DataHandlerBase):
+    """
+    Data handler for train session with noise.
+    """
+    def __init__(self, valid_ratio, ds_name, norm_val=255):
+        super(DataHandlerSP, self).__init__(valid_ratio)
+        self.load_data(name=ds_name, norm_val=norm_val)
+
+    def preprocess_data(self, **kwargs):
+        
+        # TODO: add as args to class
+        s_vs_p = 0.5
+        amount = 0.05
+
+        data = kwargs['data']
+        data_n = np.empty(shape=data.shape)
+
+        for im_id, im in zip(range(data.shape[0]), data):
+            
+            im = np.squeeze(im)
+            # Salt mode
+            num_salt = np.ceil(amount * im.size * s_vs_p)
+            coords = [np.random.randint(0, i - 1, int(num_salt))
+                        for i in im.shape]
+            im[coords] = 1
+
+            # Pepper mode
+            num_pepper = np.ceil(amount* im.size * (1. - s_vs_p))
+            coords = [np.random.randint(0, i - 1, int(num_pepper))
+                    for i in im.shape]
+            im[coords] = 0
+            data_n[im_id,...] = im[...,None]
+        return data_n
+
+    def xy_gen(self, target, batch_size, run_once):
+        """Add noise to target in yeild batches"""
+        data_in =  self.preprocess_data(data=target.copy())
+        batch = self.Batch(batch_size, data_in, target, run_once)
+        return batch
+
+    def train_gen(self, batch_size, run_once=False):
+        return self.xy_gen(self.train, batch_size, run_once)
+
+    def valid_gen(self, batch_size, run_once=True):
+        return self.xy_gen(self.valid, batch_size, run_once)
+
+    def test_gen(self, batch_size, run_once=True):
+        return self.xy_gen(self.test, batch_size, run_once)
+
+if __name__ == '__main__':
+
+    import matplotlib.pyplot as plt
+
+    dh = DataHandlerSP(0.1, 'docs')
+    dt_n =  dh.preprocess_data(data=dh.train[:5,...])
+    plt.imshow(dt_n[0,...,0], cmap='gray')
+    plt.show()

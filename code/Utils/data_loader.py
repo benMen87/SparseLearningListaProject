@@ -26,9 +26,19 @@ class Pascal(LoadNpzData):
     def __init__(self):
         pass
     
-    def load(self, large=True):
-        path = DEFAULT_DATA_PATH + large*'pascal320.npz' + (1-large)*'pascal120.npz'
+    def load(self, large=True, _path=DEFAULT_DATA_PATH):
+        path = _path + large*'/pascal320.npz' + (1-large)*'/pascal120.npz'
         train, test = super(Pascal, self).load(path)
+        return train, test
+
+class ScannedDocs(LoadNpzData):
+    """Load pascal dataset saved as npz"""    
+    def __init__(self):
+        pass
+    
+    def load(self, _path=DEFAULT_DATA_PATH):
+        path = _path + '/scanned_docs.npz'
+        train, test = super(ScannedDocs, self).load(path)
         return train, test
 
 class Berkeley(LoadNpzData):
@@ -36,8 +46,8 @@ class Berkeley(LoadNpzData):
     def __init__(self):
         pass
     
-    def load(self, gray=True):
-        path = DEFAULT_DATA_PATH + 'berkeley_db_321X321.npz'
+    def load(self, gray=True, _path=DEFAULT_DATA_PATH):
+        path =  _path + '/berkeley_db_321X321.npz'
         train, test = super(Berkeley, self).load(path)
         return train, test
 
@@ -74,6 +84,7 @@ class DataLoader(Pascal, Stl10, LoadDataFiles):
             'pascal': Pascal().load,
             'stl10': Stl10().load,
             'berkeley': Berkeley().load,
+            'docs': ScannedDocs().load,
         }
 
     def __init__(self):
@@ -96,3 +107,6 @@ class DataLoader(Pascal, Stl10, LoadDataFiles):
         if train is None and test is None:
             raise self.BadDsNameOrPath('Bas name or path {}'.format(ds_name_or_path))
         return train.astype('float32'), test.astype('float32')
+
+if __name__ == '__main__':
+    pass
