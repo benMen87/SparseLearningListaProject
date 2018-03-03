@@ -165,7 +165,8 @@ class LISTAConvDict2dBase(object):
         shrinkge_fn = self._shrinkge()
         self._creat_mask(tf.shape(inputs))
 
-        X = self._apply_mask(inputs)
+        #X = self._apply_mask(inputs)
+        X = inputs # TODO: find a dynamic way to choose apply mask
         B = self._conv2d_enc(
             _val=X,
             _name='bias'

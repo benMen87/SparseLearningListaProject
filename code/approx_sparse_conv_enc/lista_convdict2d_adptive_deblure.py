@@ -99,7 +99,7 @@ class LISTAConvDict2dAdaptiveBlur(lista_convdict2d.LISTAConvDict2d):
     
     def _apply_mask(self, inputs):
         apply_mask = tf.nn.conv2d(inputs, self._mask, strides=[1,1,1,1], padding='SAME')
-        return apply_mask_t
+        return apply_mask
 
     @property
     def inputs_blur(self):

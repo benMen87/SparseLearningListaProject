@@ -22,8 +22,8 @@ class DecConvDict2d(DecConvDict2dBase):
             _sc,
             self._cd,
             strides=[1, 1, 1, 1],
-            padding='SAME'
-            )
+            padding='SAME',
+            name='final_result')
         return res
 
 

@@ -35,13 +35,13 @@ def test(_sess, _model, batch_gen, loss, savepath):
     """
     test_loss = 0
     test_iter = 0
-    print('batch size {}'.format(batch_gen.batch_size))
+    print('batch size {}'.format(batch_gen._batch_size))
 
     for X_batch, Y_batch in batch_gen:
         feed_dict = {
             _model.input: X_batch,
-            _model.target: Y_batch
-           # _model.encoder.mask: batch_gen.mask
+            _model.target: Y_batch,
+#            _model.encoder.mask: (X_batch == Y_batch).astype(float)
         }
         test_loss += infer(_sess, feed_dict, loss)
         test_iter += 1
@@ -131,13 +131,11 @@ def save_figs(_noisy, _result, _orig=[], _sc=[], savepath='./', _names=''):
         axarr[0,0].axis('off')
 
         axarr[1,1].imshow(np.squeeze(_n), cmap=cmap)
-        axarr[1,1].set_title('noisy image -  psnr: {0:.3}\
-                [db]'.format(psnr.psnr(_o, _n, verbose=False)))
+        axarr[1,1].set_title('noisy image -  psnr: {0:.3}'.format(psnr.psnr(_o, _n, verbose=False)))
         axarr[1,1].axis('off')
 
         axarr[1,0].imshow(np.squeeze(_r), cmap=cmap)
-        axarr[1,0].set_title('reconstructed image -  psnr: {0:.3}\
-                [db]'.format(psnr.psnr(_o, _r)))
+        axarr[1,0].set_title('reconstructed image -  psnr: {0:.3}'.format(psnr.psnr(_o, _r)))
         axarr[1,0].axis('off')
         f.savefig(_example_im_fp(_nm))
     plt.close()

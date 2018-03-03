@@ -41,6 +41,7 @@ class Saver():
         self._load = kwargs.get('load_model', False)
         self._name = kwargs['name']
         self._path = kwargs['dir_path'] + '/logdir/models/' + self._name + '/'
+        self._dir_path = kwargs['dir_path']
         self._saver = None
 
         if self._save  or self._load:
@@ -55,7 +56,7 @@ class Saver():
     def maybe_load(self, load_name, sess):
         if self._load:
             if load_name != '':
-                LOAD_DIR = DIR_PATH + '/logdir/models/' + load_name + '/'
+                LOAD_DIR = self._dir_path + '/logdir/models/' + load_name + '/'
             else:
                 LOAD_DIR = self._path
             if os.listdir(LOAD_DIR):
