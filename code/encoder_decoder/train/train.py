@@ -193,7 +193,7 @@ def main():
     dh = data_handler.DataHandlerBase.factory(norm_val=255, **HYPR_PARAMS)
     model = ApproxCSC(type=HYPR_PARAMS['model_type'])
     model.build_model(
-        amount_stacked=HYPR_PARAMS['amount_stacked'],
+        sae_type=HYPR_PARAMS['sae_type'],
         unroll_count=HYPR_PARAMS['unroll_count'],
         L=1, batch_size=HYPR_PARAMS['batch_size'],
         kernel_size=HYPR_PARAMS['kernel_size'],

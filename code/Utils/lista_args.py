@@ -4,10 +4,10 @@ def args(train_mode=False):
     parser = argparse.ArgumentParser(description='Sparse encoder decoder model')
     parser.add_argument('-ks', '--kernel_size', default=3, type=int,
                                 help='kernel size to be used in lista_conv')
-    parser.add_argument('-kc', '--kernel_count', default=2, type=int,
+    parser.add_argument('-kc', '--kernel_count', default=1, type=int,
                                 help='amount of kernel to use in lista_conv')
     parser.add_argument('--dilate', '-dl', action='store_true')
-    parser.add_argument('-u', '--unroll_count', default=2,
+    parser.add_argument('-u', '--unroll_count', default=1,
          type=int, help='Amount of Reccurent timesteps for decoder')
     parser.add_argument('--shrinkge_type', default='soft thresh',
                             choices=['soft thresh', 'smooth soft thresh'])
@@ -22,6 +22,7 @@ def args(train_mode=False):
             help='probilty to sample pixel')
     parser.add_argument('--noise_sigma', '-ns', type=float, default=20,
             help='noise magnitude')
+    parser.add_argument('--sae_type', '-st', default='classic_sae', help='diffrent ways to connect encoder_decoder')
     parser.add_argument('--model_type', '-mt', default='convdict', choices=['convdict', 
                                                                             'convmultidict',
                                                                             'untied',
@@ -31,7 +32,6 @@ def args(train_mode=False):
                                                                             'adaptive_deblur_untied'])
 
     parser.add_argument('--norm_kernal',  action='store_true', help='keep kernals with unit kernels')
-    parser.add_argument('--amount_stacked',  default=1, type=int, help='Amount of LISTA AE to stack')
     parser.add_argument('--psf_id',  default=1, type=int, help='psf to use -1 for random comb (-1 is only for training)')
     if train_mode:
         parser.add_argument('--name', default='lista_conv2d', type=str, help='used for\

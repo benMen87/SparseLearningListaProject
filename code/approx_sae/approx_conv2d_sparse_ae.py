@@ -133,11 +133,14 @@ class ApproxCSC(AutoEncoderBase):
             )
         return decoder
 
+    def _creat_input_placeholder(self, w=None, h=None, c=None):
+        inpt = tf.placeholder(tf.float32,
+        shape=(None, w, h, c),
+        name='X')
+        return inpt
+
     def _add_ae_block(self, inputs, encargs):
         self._encoder.append(self._get_encoder(**encargs))
-        if inputs is None:
-            self.inputs = self._encoder[-1].creat_input_placeholder()
-            inputs = self.inputs
         self._encoder[-1].build_model(inputs)
         _decargs = {
             'init_val':self._encoder[-1].Wd, # TODO: Fix this.initialized_value(),
@@ -148,15 +151,49 @@ class ApproxCSC(AutoEncoderBase):
         self._decoder[-1].build_model(_sc=self._encoder[-1].output)
         return self._decoder[-1].output
 
+    def _downsample_layer(self, inputs, s=2):
+        downsmapled = tf.layers.conv2d(inputs=inputs, filters=inputs.get_shape().as_list()[-1], kernel_size=(5, 5), strides=(s, s), use_bias=False)
+        return downsmapled
 
-    def build_model(self, amount_stacked=1, **encargs):
+    def _upsample_layer(self, inputs, s=2):
+        upsmapled = tf.layers.conv2d_transpose(inputs=inputs, filters=inputs.get_shape().as_list()[-1], kernel_size=(5, 5), strides=(s, s), use_bias=False)
+        return upsmapled
+
+    def register_tb_images(self, tf_summary):
+        if 'dynamicthrsh' in  self.type:
+            tf_summary.image('input', self.encoder.inputs_noisy)
+        elif 'adaptive_deblur' in self.type:
+            tf_summary.image('input', self.encoder.inputs_blur)
+        else:
+            tf_summary.image('input', self.input)
+
+        if 'residual' in self.sae_type:
+            tf_summary.image('downsampled_input', self._downsample_inputs)
+            tf_summary.image('downsampled_out', self._downsampled_out) 
+            tf_summary.image('residual_in', self._inputs_residual)
+            tf_summary.image('residual_out', self._outputs_residual)
+        tf_summary.image('output', _model.output)
+        tf_summary.image('target', _model.target)
+
+    def build_model(self, sae_type='classic_sae', **encargs):
         """
         encoder-args can be user choice.
         decoder-args is defined from encoder-args.
         """
-        inputs = None
-        inputs  = self._add_ae_block(inputs, encargs)
-        for _ in range(1, amount_stacked):
-            inputs = tf.clip_by_value(inputs, 0, 1)
-            inputs  = self._add_ae_block(inputs, encargs)
-        self._outputs = tf.clip_by_value(inputs, 0, 1)
+        self.inputs = self._creat_input_placeholder(c=encargs['channel_size'])
+
+        if sae_type == 'classsic_sae':
+            self.sae_type = 'classic'
+            output = self._add_ae_block(self.inputs, encargs)
+            self._outputs = tf.clip_by_value(output, 0, 1)
+        elif sae_type == 'residual_sae':
+            self.sae_type = 'residual'
+            self._downsample_inputs = self._downsample_layer(self.inputs)
+            self._downsampled_out = self._add_ae_block(self._downsample_inputs, encargs) # downsample and clean
+            self._upsampled_out = self._upsample_layer(self._downsampled_out)
+            self._upsampled_out = tf.clip_by_value(self._upsampled_out, 0, 1)
+
+            self._inputs_residual = self.input - self._upsampled_out
+            self._outputs_residual = self._add_ae_block(self._inputs_residual, encargs)
+            self._outputs = tf.clip_by_value(self._outputs_residual, 0, 1) + self._upsampled_out
+ 

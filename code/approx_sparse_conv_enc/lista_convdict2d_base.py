@@ -43,12 +43,6 @@ class LISTAConvDict2dBase(object):
         else:
             raise ValueError('init type: {} is not reconized'.format(init_type))
 
-    def creat_input_placeholder(self):
-        inpt = tf.placeholder(tf.float32,
-        shape=(None, self.inputshape, self.inputshape, self.input_channels),
-        name='X')
-        return inpt
-
     def init_random_ista_coherent(self, kwargs):
         """
         All values are initlized randomly but with respect to their ISTA connections. 

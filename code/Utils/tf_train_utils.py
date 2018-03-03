@@ -122,14 +122,7 @@ def config_train_tb(_model, tb_name, loss=None, add_stats=False):
         tf.summary.scalar('encoded_sparsity',
              tf.reduce_mean(tf.count_nonzero(_model._encoder.output, axis=[1,2,3])))
 
-    if 'dynamicthrsh' in  _model.type:
-        tf.summary.image('input', _model.encoder.inputs_noisy)
-    elif 'adaptive_deblur' in _model.type:
-        tf.summary.image('input', _model.encoder.inputs_blur)
-    else:
-        tf.summary.image('input', _model.input)
+    _model.register_tb_images(tf.summary)
 
-    tf.summary.image('output', _model.output)
-    tf.summary.image('target', _model.target)
     return tensorboard_path
 
