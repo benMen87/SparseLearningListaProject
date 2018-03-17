@@ -85,10 +85,12 @@ def infrence(_sess, _model, _images, _mask=None, task='denoise', task_spesific_a
 
     for im in _images:
         feed_dict[_model.input] =  [im]
+        plt.show()
         if _mask is not None:
             feed_dict[encd_mask] =  _mask
         if 'denoise' in task:
             Z, im_hat = infer(_sess, feed_dict, _eval_list)
+            img_n .append(im)
         elif 'deblur' in task:
             Z, im_hat, blur_im = infer(_sess, feed_dict, _eval_list)
             img_n.append(blur_im[0,...])
@@ -104,7 +106,7 @@ def maybe_create_dir(path):
         os.makedirs(path)
 
 def save_figs(_noisy, _result, _orig=[], _sc=[], savepath='./', _names=''):
-
+    
     save_data_path = savepath + '/data/'
     save_plots_path = savepath + '/plots'
     maybe_create_dir(save_data_path)
@@ -167,13 +169,14 @@ def main(args):
     extention = args.patt
     model_dir = args.checkpoint_path
     print(model_dir)
-    test_imgs = [load(img_path) for img_path in glob.glob(tetspath + '/*' + extention)]
-
+    test_imgs = [load(img_path) for img_path in glob.glob(tetspath + '*' + extention)]
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) # release constraint of training  HW 
 
     model  = ApproxCSC(type=args.model_type)
     model.build_model(
-        amount_stacked=args.amount_stacked,
+        sae_type=args.sae_type,
+        input_shape=[test_imgs[0].shape[0] + 2*pad_size,test_imgs[0].shape[1] +\
+        2*pad_size, 1],
         unroll_count=args.unroll_count,
         L=1, batch_size=1,
         kernel_size=args.kernel_size,
@@ -187,15 +190,15 @@ def main(args):
     saver.restore(sess, tf.train.latest_checkpoint(model_dir))
 
     if 'denoise' in args.task:
-        eps = args.noise_sigma
+        eps = float(args.noise_sigma)
         test_imgs_n = [_n + np.random.normal(size=_n.shape, scale=(eps/255)) for _n in test_imgs ]
     elif 'deblur' in args.task:
         test_imgs_n = test_imgs # images are corupted as part of input model
 
     test_imgs_n = [pad_image(_n, pad_size) for _n in test_imgs_n ]
     test_imgs_n = [_n[..., None] for _n in test_imgs_n]
-
     im_results, sc_results, test_imgs_n = infrence(_sess=sess, _model=model, _images=test_imgs_n, task=args.task)#, task_spesific_args_list=[eps])
+
     im_results = [np.squeeze(res[pad_size:-pad_size, pad_size:-pad_size,...]) for res in im_results]
     test_imgs_n = [np.squeeze(_n[pad_size:-pad_size, pad_size:-pad_size]) for _n in test_imgs_n]
     sc_results = [np.squeeze(_sc) for _sc in sc_results]
@@ -205,6 +208,7 @@ def main(args):
     print('PSNR avrage is {}'.format(psnr_avg))
 
     savepath = args.savepath if args.savepath is not ' ' else DIR_PATH + '/logdir/'
+    print(savepath)
     save_figs(
         savepath=savepath,
         _noisy=test_imgs_n,

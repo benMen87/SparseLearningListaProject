@@ -43,7 +43,7 @@ class DataHandlerBase(DataLoader):
             DS_ARGS['dup_count'] = kwargs['dup_count']
             return DataHandlerMultipleNoise(**DS_ARGS)
         elif kwargs['task'] == 'inpaint':
-            DS_ARGS['inpaint_keep_prob'] = kwargs['inpaint_keep_prob']
+            DS_ARGS['keep_prob'] = kwargs['inpaint_keep_prob']
             return DataHandlerInpaint(**DS_ARGS)
         elif kwargs['task'] == 'denoise_dynamicthrsh':
             return DataHandler(**DS_ARGS)
@@ -245,15 +245,17 @@ class DataHandlerInpaint(DataHandlerBase):
     """
     Data handler for train session with noise.
     """
-    def __init__(self, valid_ratio, keep_prob, ds_name, norm_val=255):
+    def __init__(self, valid_ratio, keep_prob, ds_name, delete_pixel_val=1,  norm_val=255):
         super(DataHandlerInpaint, self).__init__(valid_ratio)
         self.drop_prob = 1 - keep_prob
+        self.del_pix_val = delete_pixel_val
         self.load_data(name=ds_name, norm_val=norm_val)
 
     def preprocess_data(self, **kwargs):
         data = kwargs['data']
         p = self.drop_prob
         mask = np.random.choice([0,1], size=data.shape, p=[p, 1-p])
+        del_pix = np.argwhere(mask == 0)
         data_n = data * mask
         return data_n, mask
 
@@ -283,8 +285,8 @@ class DataHandlerSP(DataHandlerBase):
     def preprocess_data(self, **kwargs):
         
         # TODO: add as args to class
-        s_vs_p = 0.5
-        amount = 0.05
+        s_vs_p = 1
+        amount = 0.4
 
         data = kwargs['data']
         data_n = np.empty(shape=data.shape)

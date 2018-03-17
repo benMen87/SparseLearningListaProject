@@ -107,9 +107,9 @@ def train(_model, _datahandler):
                 feed_dict = {_model.input: X_batch, _model.target: Y_batch}
                 #
                 # Creat binary mask for inpiant task
-                if HYPR_PARAMS['task'] == 'inpaint':
+                if HYPR_PARAMS['task'] == 'inpaint' and False: # TODO: fix this
                     mask = (X_batch == Y_batch).astype(float)
-                    feed_dict[encd_mask] = mask
+                    feed_dict[_model.encoder.mask] = mask
                 #
                 # Lets log stats prior to optimizer run --> clearer view of network initial state
                 if (train_dh.batch_num-1) % 30 == 0:
@@ -131,9 +131,9 @@ def train(_model, _datahandler):
                     for Xv_batch, Yv_batch in valid_dh:
                         v_itr += 1
                         feed_dict = {_model.input: Xv_batch, _model.target: Yv_batch}
-                        if HYPR_PARAMS['task'] == 'inpaint':
+                        if HYPR_PARAMS['task'] == 'inpaint' and False:
                             mask = (Xv_batch == Yv_batch).astype(float)
-                            feed_dict[encd_mask] = mask
+                            feed_dict[_model.encoder.mask] = mask
                         iter_loss, iter_recon, sc_cnt  = \
                                 sess.run([loss, _reconstructoin_loss, sparsity_counter_opt], feed_dict)
                         sp_out_itr += sc_cnt
