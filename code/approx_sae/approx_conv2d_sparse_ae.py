@@ -151,12 +151,19 @@ class ApproxCSC(AutoEncoderBase):
         self._decoder[-1].build_model(_sc=self._encoder[-1].output)
         return self._decoder[-1].output
 
-    def _downsample_layer(self, inputs, s=2):
-        downsmapled = tf.layers.conv2d(inputs=inputs, filters=inputs.get_shape().as_list()[-1], kernel_size=(5, 5), strides=(s, s), use_bias=False)
+    def _downsample_layer(self, inputs, scale=2):
+        dowsampled = tf.nn.avg_pool(inputs, ksize=[1,scale, scale, 1], strides=[1, scale, scale, 1], padding='SAME')
         return downsmapled
 
-    def _upsample_layer(self, inputs, s=2):
-        upsmapled = tf.layers.conv2d_transpose(inputs=inputs, filters=inputs.get_shape().as_list()[-1], kernel_size=(5, 5), strides=(s, s), use_bias=False)
+    def _upsample_layer(self, inputs, s=2, channel=1):
+        input_shape = tf.shape(inputs)
+        b = input_shape[0]
+        w = input_shape[1]
+        h = input_shape[2]
+        d = input_shape[3]
+
+        filters = tf.constant(1.0, shape=[2, 2, 1, channel])
+        upsmapled = tf.nn.conv2d_transpose(value=inputs,  filter=filters, output_shape=[b, s*h, s*w, channel], strides=[1, s, s, 1])
         return upsmapled
 
     def register_tb_images(self, tf_summary):
@@ -168,12 +175,15 @@ class ApproxCSC(AutoEncoderBase):
             tf_summary.image('input', self.input)
 
         if 'residual' in self.sae_type:
-            tf_summary.image('downsampled_input', self._downsample_inputs)
-            tf_summary.image('downsampled_out', self._downsampled_out) 
-            tf_summary.image('residual_in', self._inputs_residual)
-            tf_summary.image('residual_out', self._outputs_residual)
+            tf_summary.image('downsampled_input', self._downsample_inputs[0])
         tf_summary.image('output', _model.output)
         tf_summary.image('target', _model.target)
+
+    def _residual_sae_block(lr, hr, encargs):
+        lr_out = self._add_ae_block(lr, enargs)
+        lr_upsampled = self.clip_by_value(self._upsample_layer(lr_out), 0, 1)
+        out = 0.5*(lr_upsampled + self.clip_by_value(self._add_ae_block(hr - lr_upsampled, 0, 1))
+        return out
 
     def build_model(self, sae_type='classic_sae', **encargs):
         """
@@ -187,13 +197,17 @@ class ApproxCSC(AutoEncoderBase):
             output = self._add_ae_block(self.inputs, encargs)
             self._outputs = tf.clip_by_value(output, 0, 1)
         elif sae_type == 'residual_sae':
+            self.pyramid_depth = 3
             self.sae_type = 'residual'
-            self._downsample_inputs = self._downsample_layer(self.inputs)
-            self._downsampled_out = self._add_ae_block(self._downsample_inputs, encargs) # downsample and clean
-            self._upsampled_out = self._upsample_layer(self._downsampled_out)
-            self._upsampled_out = tf.clip_by_value(self._upsampled_out, 0, 1)
 
-            self._inputs_residual = self.input - self._upsampled_out
-            self._outputs_residual = self._add_ae_block(self._inputs_residual, encargs)
-            self._outputs = tf.clip_by_value(self._outputs_residual, 0, 1) + self._upsampled_out
+            self._downsample_inputs[0] = self.inputs 
+            for _ in range(self.pyramid_depth):
+                self._downsample_inputs.append(self._downsample_layer(self._downsample_inputs[-1]))
+            self._downsample_inputs = self._downsample_inputs[::-1]
+
+            lr =  self._downsampled_inputs[0]
+            for l in range(1, self.pyramid_depth + 1):
+                hr  = self._downsampled_inputs[l]
+                lr = self._residual_sae_block(lr, hr , encargs) # downsample and clean
+            self._outputs = tf.clip_by_value(lr, 0, 1)
  
