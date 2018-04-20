@@ -1,0 +1,2 @@
+model_checkpoint_path: "/home/hillel/projects/SparseLearningListaProject/code/encoder_decoder//logdir/models/u3_ks7_kc64_L1SSIM_inpaint/csc_u3_-41413"
+all_model_checkpoint_paths: "/home/hillel/projects/SparseLearningListaProject/code/encoder_decoder//logdir/models/u3_ks7_kc64_L1SSIM_inpaint/csc_u3_-41413"
