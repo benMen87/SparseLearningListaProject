@@ -5,23 +5,11 @@ from PIL import Image
 import os
 import sys
 
+FILE_PATH = os.path.dirname(os.path.abspath(__file__))
+BSDSPATH=os.path.join(FILE_PATH, '..', '..', 'images', 'BSDS300-images.tgz') 
+NP_BSDSPATH_GRAY=os.path.join(FILE_PATH, '..', '..', 'images', 'BSDS300-images.npz') 
 
-IMGSPATH = '/home/hillel/projects/SparseLearningListaProject/images/'
-BSDSPATH='/home/hillel/projects/SparseLearningListaProject/images/BSR_bsds500.tgz' 
-NP_BSDSPATH_GRAY='/home/hillel/projects/SparseLearningListaProject/images/ber_nex_321X321.npz' 
-
-
-def load(grayscale, path=NP_BSDSPATH_GRAY):
-    if grayscale:
-        DB = np.load(path)
-    else:
-        raise NotImplementedError('creat an npz dict of RGB imgs')
-
-    # use val set a test set...
-    return np.concatenate((DB['TRAIN'], DB['TEST']), axis=0), DB['VAL']
-
-
-def build_dataset(pathtosave, rgb2gray, ims_path=BSDSPATH):
+def build_dataset(pathtosave, rgb2gray=True, ims_path=BSDSPATH):
 
     X_train = []
     X_test = []
@@ -30,7 +18,7 @@ def build_dataset(pathtosave, rgb2gray, ims_path=BSDSPATH):
 
     db_p = tar.open(ims_path)
     for f_info in db_p.getmembers():
-        print('size %d'%len(db_p.getmember()))
+        print(f_info.name)
         if f_info.name.endswith('.jpg'):
             img_fp = db_p.extractfile(f_info)
             I = Image.open(img_fp)
@@ -55,7 +43,18 @@ def build_dataset(pathtosave, rgb2gray, ims_path=BSDSPATH):
             else: # test
                 X_test.append(I)
 
-    if not os.path.isdir(pathtosave):
-        os.makedirs(pathtosave)
+    if not os.path.isdir(os.path.dirname(pathtosave)):
+        os.makedirs(os.path.dirname(pathtosave))
     np.savez(pathtosave, TRAIN=X_train, TEST=X_test, VAL=X_val)
+
+def load(grayscale=True, path=NP_BSDSPATH_GRAY):
+    if not os.path.isfile(path):
+        build_dataset(path, rgb2gray=grayscale)        
+    if grayscale:
+        DB = np.load(path)
+    else:
+        raise NotImplementedError('creat an npz dict of RGB imgs')
+
+    print('trainset size: %d, validset size: %d'%(len(DB['TRAIN']), len(DB['TEST'])))
+    return DB['TRAIN'], DB['TEST']
 

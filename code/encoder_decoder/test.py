@@ -8,11 +8,11 @@ from PIL import Image
 import scipy.io as scio
 import matplotlib.pyplot as plt
 import time
+import argparse
 
 FILE_PATH = os.path.dirname(os.path.abspath(__file__))
-MODEL_DIR = \
-    '/home/hillel/projects/SparseLearningListaProject/code/encoder_decoder/logdir/models/u3_ks7_kc64_L1SSIM_inpaint'
-IMAGES_DIR = '/home/hillel/projects/supplement/reconstruction/test_set/'
+MODEL_DIR = os.path.join(FILE_PATH, 'logdir', 'models')
+IMAGES_DIR = os.path.join(FILE_PATH, '..', '..', 'images', 'test_images')
 
 
 def rgb2gray(X):
@@ -32,7 +32,7 @@ class Model():
         self.decoder = decoder
         self.mask = mask
 
-def set_args():
+def set_args(test_type):
     args = Args()
     args.load_pretrained_dict = False
     args.unroll_count = 3
@@ -40,7 +40,7 @@ def set_args():
     args.kernel_size = 7
     args.kernel_count = 64
     args.shrinkge_type = 'soft thresh'
-    args.inpaint = True
+    args.inpaint = test_type == 'inpaint'
     args.dont_train_dict = False
     return args
 
@@ -85,30 +85,32 @@ def infrence(sess, model, I_n, mask):
         _I_n = flip_fn(I_n)
         _mask = flip_fn(mask)
         feed_dict = {model.encoder.input: [_I_n]}
-        if not (mask == 1).all():
+        if len(mask) > 0:
             feed_dict[model.mask] = [_mask]
         _I_hat = np.squeeze(sess.run(model.decoder.output, feed_dict))
         I_hat += flip_fn(_I_hat)
     I_hat /= len(flip_fns)
     return I_hat
 
-def test():
+def test(test_type):
 
-    res_path = FILE_PATH + '/results/'
+    res_path = os.path.join(FILE_PATH, 'results', '')
     if not os.path.exists(res_path):
          os.makedirs(res_path)
-
-    args = set_args()
-    images_paths = glob.glob(IMAGES_DIR + '*.png')
-    print(images_paths)
+    args = set_args(test_type)
+    images_paths = glob.glob(os.path.join(IMAGES_DIR, '*'))
     pad_size = args.kernel_size // 2
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
 
     encoder, decoder, mask = sparse_aed.build_model(args, [None, None, 1])
     model = Model(encoder=encoder, decoder=decoder, mask=mask)
-
+    
+    if test_type == 'denoise':
+        ckpt = os.path.join(MODEL_DIR, 'u3_kc64_ks7_denoise', 'csc_u3_-14165')
+    else:
+        ckpt = os.path.join(MODEL_DIR, 'u3_kc64_ks7_inpaint', 'csc_u3_-41413')
     saver = tf.train.Saver()
-    saver.restore(sess, tf.train.latest_checkpoint(MODEL_DIR))
+    saver.restore(sess, ckpt)
 
     for img_path in images_paths:
         im_name = os.path.splitext(os.path.basename(img_path))[0]
@@ -144,6 +146,10 @@ def test():
        # print('IMGE: {} PSNR {}'.format(im_name, psnr))
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Test ACSC model based on paper: https://arxiv.org/abs/1711.00328')
+    parser.add_argument('--test_type', default='denoise', choices=['denoise', 'inpaint'])
+    args = parser.parse_args()
+
     print('Running denoise')
-    test()
+    test(args.test_type)
     print('Done')

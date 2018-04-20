@@ -4,8 +4,6 @@ import numpy as np
 import tensorflow as tf
 import argparse
 from tensorflow.python import debug as tf_debug
-from keras.datasets import mnist, cifar10
-from keras.utils import np_utils
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -16,7 +14,6 @@ sys.path.append(os.path.abspath(DIR_PATH + '../'))
 
 import sparse_aed
 from Utils import stl10_input
-from Utils import load_images 
 from Utils import load_berkeley
 from Utils import ms_ssim
 from Utils.psnr import psnr as psnr
@@ -27,9 +24,9 @@ parser.add_argument('-b', '--batch_size', default=2,
                             type=int, help='size of train batches')
 parser.add_argument('-n', '--num_epochs', default=0, type=int,
                             help='number of epochs steps')
-parser.add_argument('-ks', '--kernel_size', default=5, type=int,
+parser.add_argument('-ks', '--kernel_size', default=7, type=int,
                             help='kernel size to be used in lista_conv')
-parser.add_argument('-kc', '--kernel_count', default=36, type=int,
+parser.add_argument('-kc', '--kernel_count', default=64, type=int,
                             help='amount of kernel to use in lista_conv')
 parser.add_argument('--dilate', '-dl', action='store_true')
 parser.add_argument('-u', '--unroll_count', default=10,
@@ -44,13 +41,13 @@ parser.add_argument('--name', default='lista_ed', type=str, help='used for\
         creating load/store log dir names')
 parser.add_argument('--load_name', default='', type=str, help='used to\
         load from a model with "name" diffrent from this model name')
-parser.add_argument('--dataset', default='city_fruit') #'mnist','stl10', 'cifar10', 'pascal'
+parser.add_argument('--dataset', default='bsd300') #'mnist','stl10', 'cifar10', 'pascal'
 parser.add_argument('--whiten', action='store_true')
-parser.add_argument('--sparse_factor', '-sf',  default=0.5, type=float)
+parser.add_argument('--sparse_factor', '-sf',  default=0.0, type=float)
 parser.add_argument('--total_variation', '-tv',  default=0.0, type=float)
-parser.add_argument('--recon_factor', '-rf',  default=1.0, type=float)
-parser.add_argument('--ms_ssim', '-ms',  default=0.0, type=float)
-parser.add_argument('--middle_loss_factor', '-mf', default=0.1, type=float)
+parser.add_argument('--recon_factor', '-rf',  default=0.2, type=float)
+parser.add_argument('--ms_ssim', '-ms',  default=0.8, type=float)
+parser.add_argument('--middle_loss_factor', '-mf', default=0.0, type=float)
 parser.add_argument('--load_pretrained_dict', action='store_true', help='inilize dict with pre traindict in "./pretrained_dict" dir')
 parser.add_argument('--dont_train_dict', '-dt', action='store_true',  help='how many epochs to wait train dict -1 means dont train')
 parser.add_argument('--test_fruits', action='store_true', help='test on fruit images for bechmark')
@@ -60,7 +57,7 @@ parser.add_argument('--grayscale',  action='store_true', help='converte RGB imag
 parser.add_argument('--test',  action='store_true', help='Run test only')
 parser.add_argument('--inpaint_keep_prob', '-p', type=float, default=0.5,
         help='probilty to sample pixel')
-parser.add_argument('--recon_loss', default='l2', type=str, choices=['l2', 'l1'])
+parser.add_argument('--recon_loss', default='l1', type=str, choices=['l2', 'l1'])
 parser.add_argument('--opt', default='adam', type=str, choices=['adam',
     'momentum'])
 parser.add_argument('--clip_val', default=5, type=float, help='max value to clip gradiant')
@@ -91,7 +88,6 @@ def preprocess_data(X, addnoise=False, noise_sigma=0, inpaint=False,
         X /= np.std(X, axis=(1, 2), keepdims=True)
     else:
         norm = 255 if 200 < np.max(X) <= 255  else np.max(X) 
-        print('norm is {}'.format(norm))
         X = X.astype('float32') / norm
         noise_sigma = float(noise_sigma) / norm
     if addnoise:
@@ -118,7 +114,7 @@ if args.dataset == 'stl10':  # Data set with unlabeld too large cant loadfully t
     else:
         X_test, _ = stl10_input.load_test(grayscale=args.grayscale)
     # np.random.shuffle(X_test)
-elif args.dataset == 'berkeley':
+elif args.dataset == 'bsd300':
     X_train, X_test = load_berkeley.load(args.grayscale)
     np.random.shuffle(X_train)
 elif args.dataset == 'pascal':
@@ -130,10 +126,6 @@ elif args.dataset == 'city_fruit':
     X_train, X_test = D['TRAIN'], D['TEST']
     X_train = np.concatenate((X_train, X_train[:,::-1,...], X_train[...,::-1,:], X_train[:,::-1, ::-1,:]))
     np.random.shuffle(X_train)
-else: # dataset is a path of imags to load
-    X_test = load_images.load(args.dataset, args.grayscale)
-    print(X_test.shape)
-
 noise_sigma = 20
 
 
@@ -259,7 +251,7 @@ def test(encoder, decoder, batch, loss=None):
 #######################################################
 #   Log-network for tensorboard
 #######################################################
-tensorboard_path = '/data/hillel/tb/' + args.name + '/'
+tensorboard_path = args.name + '/'
 if not os.path.isdir(tensorboard_path):
     os.mkdir(tensorboard_path)
 
