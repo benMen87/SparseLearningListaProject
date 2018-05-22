@@ -22,8 +22,10 @@ def args(train_mode=False):
             help='probilty to sample pixel')
     parser.add_argument('--noise_sigma', '-ns', type=float, default=20,
             help='noise magnitude')
-    parser.add_argument('--sae_type', '-st', default='classic_sae', help='diffrent ways to connect encoder_decoder')
-    parser.add_argument('--model_type', '-mt', default='convdict', choices=['convdict', 
+    parser.add_argument('--sae_type', '-st', default='classic_sae',
+            choices=['classical_sae', 'resudual_sae', 'ms_sae'], help='diffrent ways to connect encoder_decoder')
+    parser.add_argument('--model_type', '-mt', default='convdict', choices=['convdict',
+                                                                           'convdict_alt', 
                                                                             'convmultidict',
                                                                             'untied',
                                                                             'dynamicthrsh',
@@ -33,6 +35,8 @@ def args(train_mode=False):
 
     parser.add_argument('--norm_kernal',  action='store_true', help='keep kernals with unit kernels')
     parser.add_argument('--psf_id',  default=1, type=int, help='psf to use -1 for random comb (-1 is only for training)')
+    parser.add_argument('--pyramid_depth',  default=1, type=int, help='depth\
+                        of resudual pyramid')
     if train_mode:
         parser.add_argument('--name', default='lista_conv2d', type=str, help='used for\
             creating load/store log dir names')
@@ -46,7 +50,8 @@ def args(train_mode=False):
         parser.add_argument('--debug', dest='debug', action='store_true')
         parser.add_argument('--load_name', default='', type=str, help='used to\
             load from a model with "name" diffrent from this model name')
-        parser.add_argument('--dataset', default='docs', choices=['mnist', 'docs', 'stl10', 'cifar10', 'pascal', 'pascal_small'])
+        parser.add_argument('--dataset', default='docs', choices=['mnist',
+            'docs', 'stl10', 'cifar10', 'pascal', 'pascal_small', 'berkeley'])
         parser.add_argument('--sparse_factor', '-sf',  default=0.0, type=float)
         parser.add_argument('--sparse_sim_factor',  default=0, type=float)
         parser.add_argument('--recon_factor', '-rf',  default=0.2, type=float)

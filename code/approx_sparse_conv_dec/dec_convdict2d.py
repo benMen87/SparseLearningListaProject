@@ -15,7 +15,10 @@ class DecConvDict2d(DecConvDict2dBase):
     Decoder is a simple linear convolutoin dictionay
     """
     def __init__(self, init_val, output_shape, norm_kernal):
-        super(DecConvDict2d, self).__init__(init_val.initialized_value(), output_shape)
+        try:
+            super(DecConvDict2d, self).__init__(init_val.initialized_value(), output_shape)
+        except:
+            super(DecConvDict2d, self).__init__(init_val, output_shape)
 
     def reconstruct(self, _sc):
         res =  tf.nn.conv2d(

@@ -184,7 +184,8 @@ def main(args):
         channel_size=1, #TODO: fixthis
         norm_kernal=args.norm_kernal,
         is_train=False,
-        psf_id=args.psf_id
+        psf_id=args.psf_id,
+        pyramid_depth=args.pyramid_depth
     )
     saver = tf.train.Saver()
     saver.restore(sess, tf.train.latest_checkpoint(model_dir))

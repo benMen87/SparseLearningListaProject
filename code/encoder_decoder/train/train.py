@@ -48,9 +48,18 @@ def train(_model, _datahandler):
 
     opt_name = HYPR_PARAMS.get('optimizer', 'adam')
     global_step = tf.Variable(0, dtype=tf.int32, trainable=False, name='global_step')
-    learning_rate_var = tf.Variable(HYPR_PARAMS['learning_rate'])
-    optimizer = tf_train_utils.get_optimizer(opt_name, learning_rate_var).minimize(loss, global_step=global_step)
-
+    learning_rate_var = tf.Variable(HYPR_PARAMS['learning_rate'],
+            trainable=False, name='LR')
+    optimizer = tf_train_utils.get_optimizer(opt_name, learning_rate_var)    
+    ############## TEMP ##############################
+    print('optmizer before', optimizer)
+    lr_var = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
+            ".*/lr_sparse_encoder/")
+    print(lr_var)
+    optimizer_init = tf_train_utils.clip_grad(optimizer, loss, 1, lr_var, global_step)
+    print('optmizer after', optimizer)
+    optimizer = optimizer.minimize(loss, global_step=global_step)
+    #######################################################
     batch_size = HYPR_PARAMS['batch_size']
     if HYPR_PARAMS['task'] == 'multi_denoise':
         batch_size *= HYPR_PARAMS['dup_count']
@@ -68,7 +77,7 @@ def train(_model, _datahandler):
     ###################################################################
     validation_loss = []
     valid_sparsity_out = []
-
+    platou_cnt = 0
     with tf.Session() as sess:
 
         tf.global_variables_initializer().run(session=sess)
@@ -100,7 +109,9 @@ def train(_model, _datahandler):
         print('number of epochs %d'%HYPR_PARAMS['num_epochs'])
         for epoch in range(1, HYPR_PARAMS['num_epochs'] + 1):
             epoch_loss = 0
+            print('*'*50)
             print('epoch number:%d'%epoch)
+            print('*'*50)
 
             for X_batch, Y_batch in train_dh:
                 iter_loss = 0
@@ -121,7 +132,7 @@ def train(_model, _datahandler):
                 _, iter_loss, = sess.run([optimizer, loss], feed_dict)
                 epoch_loss += iter_loss
                 
-                if train_dh.batch_num % 50  == 0:
+                if train_dh.batch_num % 5  == 0: #TODO(hillel): add cond based on dataset size
                     valid_loss = 0
                     v_itr = 0
                     sp_out_itr = 0
@@ -145,14 +156,17 @@ def train(_model, _datahandler):
                     validation_loss.append(valid_loss)
                     valid_sparsity_out = sp_out_itr/v_itr
                     if valid_loss <= np.min(validation_loss):
+                        platou_cnt = 0
                         if HYPR_PARAMS['save_model']:
                             saver_mngr.save(sess, global_step=global_step)
                             print('saving model at: %s'%saver_mngr._name) 
-                    if len(validation_loss)  > 10:
-                        if (valid_loss > validation_loss[-10:]).all():
-                            tf_train_utils.change_lr_val(sess, learning_rate_var, 0.9) 
-                            saver_mngr.restore(sess)
-                            print('decreasing learning_rate to\
+                    else:
+                        platou_cnt += 1
+                    if platou_cnt  > 100:
+                        platou_cnt = 0
+                        tf_train_utils.change_lr_val(sess, learning_rate_var, 0.9) 
+                        saver_mngr.restore(sess)
+                        print('decreasing learning_rate to\
                                     {}'.format(learning_rate_var.eval()))
                     print('valid loss: %f recon loss: %f encoded sparsity: %f' %
                         (valid_loss, recon, valid_sparsity_out))
@@ -201,7 +215,8 @@ def main():
         kernel_count=HYPR_PARAMS['kernel_count'],
         channel_size=dh.shape[-1],
         norm_kernal=HYPR_PARAMS['norm_kernal'],
-        psf_id=HYPR_PARAMS['psf_id']
+        psf_id=HYPR_PARAMS['psf_id'],
+        pyramid_depth=HYPR_PARAMS['pyramid_depth']
     )
     print('Amount of params: {}'.format(param_count()))
     train(_datahandler=dh, _model=model)
