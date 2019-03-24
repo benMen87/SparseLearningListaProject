@@ -26,3 +26,8 @@ to run test code:
 > python test.py --test_type inpint
 
 where the defult test is run on on the checkpint model in 'code/encoder_decoder/logdir/models'
+
+
+## PyTorch implemintation
+see A more updated with many diffrent varianaints 
+here: https://github.com/benMen87/AppriximateConvolutionalSparseCoding
